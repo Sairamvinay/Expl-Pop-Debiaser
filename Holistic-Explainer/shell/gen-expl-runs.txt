@@ -1,0 +1,19 @@
+BEAUTY
+
+EXPL GENERATE: 
+
+
+python3 expl-generate-train.py --data_path ../data/ --dataset beauty --output_dir generated-expls/ --maxlen 50 --batch_size 64 --seed 999 --local-rank 0  >> outputs/expl-gen-BEAUTY-FULLRUN-JUNE30.txt
+
+
+YELP
+
+EXPL-GENERATE: python3 expl-generate-train.py --data_path ../data/ --dataset yelp --output_dir generated-expls/ --maxlen 50 --batch_size 64 --seed 999 --local-rank 1  >> outputs/expl-gen-YELP-FULLRUN-JULY5.txt
+
+
+
+CLOTHING
+
+EXPL-GENERATE: python3 -u expl-generate-train.py --data_path ../data/ --dataset clothing --pred_dir ../top-preds/ --output_dir generated-expls/  --model_name TallRec-Clean --maxlen 50 --batch_size 64 --seed 999 --local-rank 0  >> outputs/expl-gen-TALLREC-CLEAN-CLOTHING-logwandb-FULLRUN-JUN4.txt
+
+
