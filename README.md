@@ -2,7 +2,7 @@
 
 ## Data
 
-Steps to obtain
+Steps to reproduce
 1) Download processed data from [here](https://drive.google.com/file/d/1qGxgmx7G_WB7JE4Cn_bEcZ_o_NAJLE3G/view). 
 2) place in `data/` folder.
 3) Create target items as per `notebook-data-creation/beauty-targetItem-10%-MAY29.ipynb` and related notebooks for other datasets. Place it inside `data/$DATASET$` directory.
