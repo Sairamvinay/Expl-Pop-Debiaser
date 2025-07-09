@@ -384,6 +384,7 @@ def main(args, train_loader, val_loader, user_num, item_num, local_rank):
                             else:
                                 preds = model(user_ids, item_ids, expl_embeds)
 
+                            pred_scores = preds / args.temperature
                             pred_scores = torch.sigmoid(preds).squeeze()
 
                             # Separate scores
