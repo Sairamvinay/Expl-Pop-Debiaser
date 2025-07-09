@@ -18,6 +18,7 @@ from model_utils import DeepFM, get_explanation_embedding, bpr_loss
 from utils import seedSet,print_trainable_parameters,save_checkpoint,load_checkpoint,verify_model_weights
 from train_dataset_BPR import get_BPRdataset_loader
 from train_dataset import get_dataset_loader as getExplBPRdataset_loader
+from train_dataset_stage2 import get_dataset_loader as getStage2dataset_loader
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
@@ -42,6 +43,7 @@ def parse_args():
     parser.add_argument('--weight_decay', type=float, required=True, help='Weight decay for optimization')
     parser.add_argument('--warmup_ratio', type=float, required=True, help='Warmup ratio for learning rate schedule')
     parser.add_argument('--clip_grad_norm', type=float, default=1.0, help='Gradient clipping norm')
+    parser.add_argument("--temperature",type=float, default=5.0, help='Temperature for Scaling prior to sigmoid')
     parser.add_argument('--stage',type=int, default=1, help='Which training stage: 0 (Utility training) ; 1(Explanation pairwise) or 2(Fairness Disparity)') 
 
     parser.add_argument('--data_path', type=str, required=True, help='Path to the dataset')
@@ -99,7 +101,6 @@ def create_opt_lr(model,data_len,gradient_accumulation_steps,num_epochs,warmup_r
 
 
 def main(args, train_loader, val_loader, user_num, item_num, local_rank):
-    AUTH_TOKEN="YOUR_HF_TOKEN"
     start = time()
     device = torch.device(f"cuda:{local_rank}")
     device_map={"": local_rank}
@@ -109,6 +110,7 @@ def main(args, train_loader, val_loader, user_num, item_num, local_rank):
     
     early_stopping_patience = 3
     
+    AUTH_TOKEN = "YOUR_HF_TOKEN"
     encoder = AutoModelForCausalLM.from_pretrained(model_name,torch_dtype=torch.float16,token=AUTH_TOKEN,device_map=device_map,output_hidden_states=True).eval()
     
     # =============================================================
@@ -160,6 +162,7 @@ def main(args, train_loader, val_loader, user_num, item_num, local_rank):
     
     if args.stage == 2:
         disp_ratio = torch.tensor(1/9).to(device)
+        EPSILON = 1e-8
         
         if args.checkpoint:
             model = load_checkpoint(model, args.checkpoint)
@@ -241,15 +244,59 @@ def main(args, train_loader, val_loader, user_num, item_num, local_rank):
                             print("loss: ",loss.item(),end= ' ,')
                         
                     elif args.stage == 2:
-                        pass
+                        user_ids = torch.tensor(batch['UserID']).to(device)
+                        item_ids = torch.tensor(batch['ItemID']).to(device)
+                        pos_emb = get_explanation_embedding(encoder,tokenizer,batch['pos-expl'],device)
+                        neg_emb = get_explanation_embedding(encoder,tokenizer,batch['neg-expl'],device)
+                        pop_labels = torch.tensor(batch['pop-label']).to(device)
+
+                        # Select appropriate explanation embeddings
+                        expl_embeds = torch.where(pop_labels.unsqueeze(1) == 1, neg_emb, pos_emb)
+                        del pos_emb
+                        del neg_emb
+
+                        # Forward pass
+                        if args.distributed:
+                            preds = model.module(user_ids, item_ids, expl_embeds)
+                        else:
+                            preds = model(user_ids, item_ids, expl_embeds)
+                        
+                        pred_scores = preds / args.temperature
+                        pred_scores = torch.sigmoid(pred_scores).squeeze()
+
+                        # Separate scores
+                        pop_scores = pred_scores[pop_labels == 1]
+                        niche_scores = pred_scores[pop_labels == 0]
+
+                        if pop_scores.numel() == 0 or niche_scores.numel() == 0:
+                            fair_loss = torch.tensor(1.0, device=device, requires_grad=True)
+
+                        else:
+
+                            # Disparity loss (Eq. 16 + 17 from Li et al. 2022)
+                            numerator = (pop_scores.sum() - disp_ratio * niche_scores.sum())
+                            denominator = (pred_scores.sum() + EPSILON)
+                            fair_loss = (numerator / denominator)
+
+                        loss = fair_loss ** 2
+                        msg = ""
+                        if args.debug or step == 0:
+                            print("user ids: ",user_ids, end = ' ,')
+                            print("item ids: ",item_ids, end = ' ,')
+                            print("pop_labels: ",pop_labels, end= ' ,')
+                            print("pred scores before temperature scale: ",preds)
+                            print("pred after temperature and sigmoiding: ",pred_scores)
+                            print("expl embeds: ",expl_embeds, end= ' ,')
+                            print("pop scores: ",pop_scores, end = ' ,')
+                            print("niche scores: ",niche_scores, end = ' ,')
+                            print("fair_loss: ",fair_loss.item(),end= ' ,')
+                            print("total loss: ",loss.item(),end=' ,')
 
                     else:
                         raise NotImplementedError
                 
                 except Exception:
-                    print("user ids: ",user_ids, end = ' ,')
-                    print("pos item ids: ",pos_item_ids, end = ' ,')
-                    print("neg item ids: ",neg_item_ids, end = ' ,')
+                    print("Batch errored: ",batch)
 
             
             scaler.scale(loss).backward()
@@ -320,7 +367,40 @@ def main(args, train_loader, val_loader, user_num, item_num, local_rank):
                             val_loss = bpr_loss(posexplscore, negexplscore)
 
                         elif args.stage == 2:
-                            pass
+                            user_ids = torch.tensor(batchv['UserID']).to(device)
+                            item_ids = torch.tensor(batchv['ItemID']).to(device)
+                            pos_emb = get_explanation_embedding(encoder,tokenizer,batchv['pos-expl'],device)
+                            neg_emb = get_explanation_embedding(encoder,tokenizer,batchv['neg-expl'],device)
+                            pop_label = torch.tensor(batchv['pop-label']).to(device)
+                    
+                            # Select appropriate explanation embeddings
+                            expl_embeds = torch.where(pop_label.unsqueeze(1) == 1, neg_emb, pos_emb)
+                            del pos_emb
+                            del neg_emb
+                            # Forward pass
+
+                            if args.distributed:
+                                preds = model.module(user_ids, item_ids, expl_embeds)
+                            else:
+                                preds = model(user_ids, item_ids, expl_embeds)
+
+                            pred_scores = torch.sigmoid(preds).squeeze()
+
+                            # Separate scores
+                            pop_scores = pred_scores[pop_label == 1]
+                            niche_scores = pred_scores[pop_label == 0]
+
+                            if pop_scores.numel() == 0 or niche_scores.numel() == 0:
+                                fair_loss = torch.tensor(1.0, device=device, requires_grad=True)
+
+                            else:
+                                # Disparity loss (Eq. 16 + 17 from Li et al. 2022)
+                                numerator = (pop_scores.sum() - disp_ratio * niche_scores.sum())
+                                denominator = (pred_scores.sum() + EPSILON)
+                                fair_loss = (numerator / denominator)
+
+                            val_loss = fair_loss ** 2
+                        
                         else:
                             raise NotImplementedError
 
@@ -437,6 +517,40 @@ if __name__ == '__main__':
         val_loader, val_dataset = getExplBPRdataset_loader(expls = val_expls, targetItems = targetItems, user_num = USER_NUM, item_num = ITEM_NUM, batch_size=args.batch_size, workers=args.num_workers, distributed=False, shuffle=True,mode='val')
         
         user_num, item_num = max(train_dataset.user_num, val_dataset.user_num), max(train_dataset.item_num, val_dataset.item_num)
+    
+    elif args.stage == 2:
+        TRAIN_SPLIT = 0.8
+        expls = load_pickle(os.path.join(args.expl_path, args.dataset, "train.pkl"))
+        # 1. Convert keys to a NumPy array
+        keys = np.array(list(expls.keys()))
+        num_train = int(TRAIN_SPLIT * len(keys))
+
+        # 2. Shuffle and split indices
+        shuffled_indices = np.random.permutation(len(keys))
+        train_indices = shuffled_indices[:num_train]
+        val_indices = shuffled_indices[num_train:]
+
+        # 3. Get the corresponding keys
+        train_keys = keys[train_indices]
+        val_keys = keys[val_indices]
+
+        train_keys = [tuple(k) for k in train_keys]
+        val_keys = [tuple(k) for k in val_keys]
+
+        # 4. Build new dicts
+        train_expls = {k: expls[k] for k in train_keys}
+        val_expls = {k: expls[k] for k in val_keys}
+        
+        item2id = datamaps['item2id']
+    
+        USER_NUM = len(datamaps['user2id'])
+        ITEM_NUM = len(item2id)
+        
+        train_loader, train_dataset = getStage2dataset_loader(expls = train_expls, targetItems = targetItems, user_num = USER_NUM, item_num = ITEM_NUM, batch_size=args.batch_size, workers=args.num_workers, distributed=args.distributed, mode='train')
+    
+        val_loader, val_dataset = getStage2dataset_loader(expls = val_expls, targetItems = targetItems, user_num = USER_NUM, item_num = ITEM_NUM, batch_size=args.batch_size, workers=args.num_workers, distributed=False, shuffle=True,mode='val')
+        
+        user_num, item_num = max(train_dataset.user_num, val_dataset.user_num), max(train_dataset.item_num, val_dataset.item_num)        
     
     
     

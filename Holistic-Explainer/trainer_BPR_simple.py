@@ -62,10 +62,10 @@ def train_custom_single(seed = 999,
                         dropout = 0.1,
                         stage = 0,
                         checkpoint=None,
-                        debug= False
+                        debug= False,
+                        temperature = 5,
                        ):
     
-    AUTH_TOKEN= "YOUR_HF_TOKEN"
     seedSet(seed) 
     x, _, _, values = inspect.getargvalues(inspect.currentframe())
     print("Arguments passed to train_custom_single():")
@@ -82,6 +82,7 @@ def train_custom_single(seed = 999,
     
     model_name = "meta-llama/Llama-2-7b-hf" # "meta-llama/Llama-3.2-1B"
     
+    AUTH_TOKEN = "YOUR_HF_TOKEN"
     # =============================================================
     # Step 2. Basic Tokenizer Setup
     # =============================================================
@@ -116,6 +117,12 @@ def train_custom_single(seed = 999,
         if checkpoint:
             model = load_checkpoint(model, checkpoint)
     
+    if stage == 2:
+        disp_ratio = torch.tensor(1/9).to(device)
+        EPSILON = 1e-8
+        if checkpoint:
+            model = load_checkpoint(model, checkpoint)
+    
     for epoch in range(num_epochs):
         model.train()
         total_loss = 0.0
@@ -125,8 +132,6 @@ def train_custom_single(seed = 999,
             
             torch.cuda.empty_cache()
             with autocast(): 
-                
-                
                 
                 if stage == 0:
                     user_ids = torch.tensor(batch['UserID']).to(device)
@@ -179,7 +184,47 @@ def train_custom_single(seed = 999,
                             print(f"\t\tNegative Score Logits: mean={negexplscore.mean().item():.4f}, std={negexplscore.std().item():.4f}, max={negexplscore.max().item():.4f}")
                 
                 elif stage == 2:
-                    pass
+                    user_ids = torch.tensor(batch['UserID']).to(device)
+                    item_ids = torch.tensor(batch['ItemID']).to(device)
+                    pos_emb = get_explanation_embedding(encoder,tokenizer,batch['pos-expl'],device)
+                    neg_emb = get_explanation_embedding(encoder,tokenizer,batch['neg-expl'],device)
+                    pop_labels = torch.tensor(batch['pop-label']).to(device)
+
+                    # Select appropriate explanation embeddings
+                    expl_embeds = torch.where(pop_labels.unsqueeze(1) == 1, neg_emb, pos_emb)
+                    
+                    preds = model(user_ids, item_ids, expl_embeds)
+                    preds /= temperature
+                    pred_scores = torch.sigmoid(preds).squeeze()
+                    
+                    
+
+                    # Separate scores
+                    pop_scores = pred_scores[pop_labels == 1]
+                    niche_scores = pred_scores[pop_labels == 0]
+
+                    if pop_scores.numel() == 0 or niche_scores.numel() == 0:
+                        fair_loss = torch.tensor(1.0, device=device, requires_grad=True)
+
+                    else:
+
+                        # Disparity loss (Eq. 16 + 17 from Li et al. 2022)
+                        numerator = (pop_scores.sum() - disp_ratio * niche_scores.sum())
+                        denominator = (pred_scores.sum() + EPSILON)
+                        fair_loss = (numerator / denominator)
+
+                    loss = fair_loss ** 2
+                    msg = ""
+                    if step == 0:
+                        print("user ids: ",user_ids, end = ' ,')
+                        print("item ids: ",item_ids, end = ' ,')
+                        print("pop_labels: ",pop_labels, end= ' ,')
+                        print("expl embeds: ",expl_embeds, end= ' ,')
+                        print("pop scores: ",pop_scores, end = ' ,')
+                        print("niche scores: ",niche_scores, end = ' ,')
+                        print("fair_loss: ",fair_loss.item(),end= ' ,')
+                        print("total loss: ",loss.item(),end=' ,')
+
                 
                 else:
                     raise NotImplementedError
@@ -249,7 +294,34 @@ def train_custom_single(seed = 999,
                             val_loss = bpr_loss(posexplscore, negexplscore)
                         
                         elif stage == 2:
-                            pass
+                            user_ids = torch.tensor(batchv['UserID']).to(device)
+                            item_ids = torch.tensor(batchv['ItemID']).to(device)
+                            labels = torch.tensor(batchv['label'],dtype=torch.float16).to(device).unsqueeze(1)
+                            pos_emb = get_explanation_embedding(encoder,tokenizer,batchv['pos-expl'],device)
+                            neg_emb = get_explanation_embedding(encoder,tokenizer,batchv['neg-expl'],device)
+                            pop_label = torch.tensor(batchv['pop-label']).to(device)
+                    
+                            # Select appropriate explanation embeddings
+                            expl_embeds = torch.where(pop_labels.unsqueeze(1) == 1, neg_emb, pos_emb)
+                            # Forward pass
+                            preds = model(user_ids, item_ids, expl_embeds)
+                            preds /= temperature
+                            pred_scores = torch.sigmoid(preds).squeeze()
+
+                            # Separate scores
+                            pop_scores = pred_scores[pop_labels == 1]
+                            niche_scores = pred_scores[pop_labels == 0]
+
+                            if pop_scores.numel() == 0 or niche_scores.numel() == 0:
+                                fair_loss = torch.tensor(1.0, device=device, requires_grad=True)
+
+                            else:
+                                # Disparity loss (Eq. 16 + 17 from Li et al. 2022)
+                                numerator = (pop_scores.sum() - disp_ratio * niche_scores.sum())
+                                denominator = (pred_scores.sum() + EPSILON)
+                                fair_loss = (numerator / denominator)
+                            
+                            val_loss = fair_loss ** 2
 
                         else:
                             raise NotImplementedError
