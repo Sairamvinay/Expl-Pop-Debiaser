@@ -1,0 +1,1 @@
+python3 MF-BPR-evaluate.py --output_dir top-preds/ --seed 999 --num_workers 4 --batch_size 100 --id_embed_dim 128 --data_path ../data/ --dataset beauty --checkpoint snap/beauty/checkpoint_epoch_BEST.pt --local-rank 1  >> outputs/beauty/BEAUTY-EVAL-MF-BPR-JULY13.txt
