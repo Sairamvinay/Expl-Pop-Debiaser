@@ -49,7 +49,6 @@ def parse_args():
 
 
 def main(args, eval_loader, user_num, item_num, local_rank):
-    AUTH_TOKEN = "YOUR_HF_TOKEN"
     start = time()
     device = torch.device(f"cuda:{local_rank}")
     device_map={"": local_rank}
@@ -59,6 +58,7 @@ def main(args, eval_loader, user_num, item_num, local_rank):
     
     os.makedirs(os.path.join(args.output_dir,f"stage-{args.stage}"),exist_ok=True)
     early_stopping_patience = 3
+    AUTH_TOKEN = "YOUR_HF_TOKEN"
     
     # =============================================================
     # Step 2. Basic Tokenizer Setup
@@ -111,11 +111,12 @@ def main(args, eval_loader, user_num, item_num, local_rank):
                     expl_embeds = get_explanation_embedding(encoder,tokenizer,batchv['pos-expl'],device)
                 
                 else:
-                    expl_embeds = torch.zeros((len(user_ids), encoder.config.hidden_size), dtype=torch.float16).to(device) 
+                    expl_embeds = get_explanation_embedding(encoder,tokenizer,batchv['pos-expl'],device)
+                    # expl_embeds = torch.zeros((len(user_ids), encoder.config.hidden_size), dtype=torch.float16).to(device) 
                 
                 # Forward pass
-                logits = model(user_ids, item_ids, expl_embeds).squeeze()
-                logits /= args.temperature
+                logits = model(user_ids, item_ids, expl_embeds,mild_factor_scale=1/args.temperature).squeeze()
+                # logits /= args.temperature
                 
                 # logits /= logits.abs().max()
                 # logits = torch.clamp(logits, min=-5, max=5)
@@ -222,7 +223,7 @@ if __name__ == '__main__':
     elif args.stage == 1:
         expls = load_pickle(os.path.join(args.expl_path, args.dataset,'test.pkl'))
     else:
-        expls = None
+        expls = load_pickle(os.path.join(args.expl_path, args.dataset,'test.pkl'))
     eval_loader, eval_dataset = get_eval_dataset_loader(datamaps = datamaps, targetItems = targetItems, user_num = user_num, item_num = item_num, mode='test',batch_size=args.batch_size, dataset = args.dataset, data_path = args.data_path, expls = expls, workers=args.num_workers, shuffle=False)
     
     user_num, item_num = eval_dataset.user_num, eval_dataset.item_num

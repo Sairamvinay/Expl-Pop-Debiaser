@@ -51,6 +51,8 @@ class DeepFM(nn.Module):
         super().__init__()
         self.user_embed = nn.Embedding(user_num, id_embed_dim)
         self.item_embed = nn.Embedding(item_num, id_embed_dim)
+        
+        expl_dim = id_embed_dim
 
         # Linear (first-order term)
         self.linear = nn.Linear(id_embed_dim * 2 + expl_embed_dim, 1)
@@ -60,9 +62,10 @@ class DeepFM(nn.Module):
         
         # self.final_norm = nn.LayerNorm(1)
         
+        
         self.input_norm = nn.LayerNorm(id_embed_dim * 2 + expl_embed_dim)
 
-        self.expl_proj = nn.Linear(expl_embed_dim, id_embed_dim)
+        self.expl_proj = nn.Linear(expl_embed_dim, expl_dim)
 
         # Deep component
         deep_input_dim = id_embed_dim * 2 + expl_embed_dim
@@ -81,7 +84,7 @@ class DeepFM(nn.Module):
 
         # FM second-order interaction
         self.dropout = nn.Dropout(dropout_rate)
-
+    
     def fm_interaction(self, x):
         sum_square = torch.sum(x, dim=1) ** 2
         square_sum = torch.sum(x ** 2, dim=1)
@@ -98,6 +101,7 @@ class DeepFM(nn.Module):
 
         feats = torch.stack([u, i, e], dim=1)  # shape (B, 3, D)
         concat_feats = torch.cat([u, i, expl_embeds], dim=-1)  # shape (B, 2*ID_dim + expl_dim)
+        # concat_feats = torch.cat([u, i, e],dim=-1) # shape (B, 3* ID_dim)
         concat_feats = self.input_norm(concat_feats)
 
 
@@ -112,5 +116,11 @@ class DeepFM(nn.Module):
         # score = torch.clamp(score, min=-10.0, max=10.0)  # prevent exploding logits
         return score
 
-        # return linear_out + fm_out + deep_out
-
+    def freeze_component(self, component_names):
+        for name in component_names:
+            module = getattr(self, name, None)
+            if module is not None:
+                for param in module.parameters():
+                    param.requires_grad = False
+                print(f"param: {name} is frozen")
+    

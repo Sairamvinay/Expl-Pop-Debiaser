@@ -4,7 +4,7 @@ import torch
 import torch.distributed as dist
 import torch.multiprocessing as mp
 from transformers import  AutoTokenizer
-
+# LOGIN CREDENTIALS: HuggingFACE: YOUR_HF_TOKEN
 import json
 import random
 import numpy as np
@@ -76,7 +76,7 @@ def objective(trial):
     torch.cuda.empty_cache()
     
     # variables: id_embed_dim ; hidden_dim (4x,2x,x) ; dropout; learning_rate ; weight_decay ; warmup_ratio ; 
-    learning_rate = trial.suggest_loguniform("learning_rate", 1e-5, 1e-2)
+    learning_rate = trial.suggest_loguniform("learning_rate", 1e-6, 1e-3)
     weight_decay = trial.suggest_loguniform("weight_decay", 1e-7, 1e-2)
     
     warmup_ratio = trial.suggest_uniform("warmup_ratio", 0.01, 0.1)
@@ -113,7 +113,8 @@ def objective(trial):
                         dataset = dataset,
                         stage=stage,
                         checkpoint=checkpoint,
-                        debug=debug
+                        debug=debug,
+                        temperature=3,
                        )
     torch.cuda.empty_cache()
 

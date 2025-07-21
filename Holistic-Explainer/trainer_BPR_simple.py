@@ -81,7 +81,6 @@ def train_custom_single(seed = 999,
     device_map={"": gpu}
     
     model_name = "meta-llama/Llama-2-7b-hf" # "meta-llama/Llama-3.2-1B"
-    
     AUTH_TOKEN = "YOUR_HF_TOKEN"
     # =============================================================
     # Step 2. Basic Tokenizer Setup
@@ -116,6 +115,8 @@ def train_custom_single(seed = 999,
     if stage == 1:
         if checkpoint:
             model = load_checkpoint(model, checkpoint)
+        
+        model.freeze_component(["user_embed", "item_embed"])
     
     if stage == 2:
         disp_ratio = torch.tensor(1/9).to(device)
@@ -164,8 +165,8 @@ def train_custom_single(seed = 999,
                     neg_emb = get_explanation_embedding(encoder,tokenizer,batch['neg-expl'],device)
                     label = torch.tensor(batch['label']).to(device)
                     
-                    posexplscore = model(user_ids = user_ids, item_ids = item_ids, expl_embeds = pos_emb)
-                    negexplscore = model(user_ids = user_ids, item_ids = item_ids, expl_embeds = neg_emb)
+                    posexplscore = model(user_ids = user_ids, item_ids = item_ids, expl_embeds = pos_emb, mild_factor_scale=1/temperature)
+                    negexplscore = model(user_ids = user_ids, item_ids = item_ids, expl_embeds = neg_emb, mild_factor_scale=1/temperature)
                     loss = bpr_loss(posexplscore, negexplscore)
                     msg = ""
                     if step == 0:

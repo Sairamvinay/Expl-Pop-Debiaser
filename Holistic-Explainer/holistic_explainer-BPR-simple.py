@@ -109,8 +109,8 @@ def main(args, train_loader, val_loader, user_num, item_num, local_rank):
     model_name = "meta-llama/Llama-2-7b-hf" # "meta-llama/Llama-3.2-1B" 
     
     early_stopping_patience = 3
-    
     AUTH_TOKEN = "YOUR_HF_TOKEN"
+
     encoder = AutoModelForCausalLM.from_pretrained(model_name,torch_dtype=torch.float16,token=AUTH_TOKEN,device_map=device_map,output_hidden_states=True).eval()
     
     # =============================================================
@@ -152,6 +152,7 @@ def main(args, train_loader, val_loader, user_num, item_num, local_rank):
     early_stopping_counter = 0
     terminate = False
     to_print = True
+    EPSILON = 1e-6
     
     if (not args.distributed) or (args.distributed and dist.get_rank() == 0):
         best_val_loss = float('inf')
@@ -162,7 +163,7 @@ def main(args, train_loader, val_loader, user_num, item_num, local_rank):
     
     if args.stage == 2:
         disp_ratio = torch.tensor(1/9).to(device)
-        EPSILON = 1e-8
+        
         
         if args.checkpoint:
             model = load_checkpoint(model, args.checkpoint)
@@ -172,6 +173,11 @@ def main(args, train_loader, val_loader, user_num, item_num, local_rank):
         if args.checkpoint:
             model = load_checkpoint(model, args.checkpoint)
             verify_model_weights(model)
+        
+        if args.distributed:
+            model.module.freeze_components(["user_embed", "item_embed"])
+        else:
+            model.freeze_components(["user_embed", "item_embed"])
     
     
     for epoch in range(args.epochs):
@@ -224,12 +230,12 @@ def main(args, train_loader, val_loader, user_num, item_num, local_rank):
                         label = torch.tensor(batch['label']).to(device)
                         
                         if args.distributed:
-                            posexplscore = model.module(user_ids = user_ids, item_ids = item_ids, expl_embeds = pos_emb)
-                            negexplscore = model.module(user_ids = user_ids, item_ids = item_ids, expl_embeds = neg_emb)
+                            posexplscore = model.module(user_ids = user_ids, item_ids = item_ids, expl_embeds = pos_emb,mild_factor_scale=1/args.temperature)
+                            negexplscore = model.module(user_ids = user_ids, item_ids = item_ids, expl_embeds = neg_emb,mild_factor_scale=1/args.temperature)
                         
                         else:
-                            posexplscore = model(user_ids = user_ids, item_ids = item_ids, expl_embeds = pos_emb)
-                            negexplscore = model(user_ids = user_ids, item_ids = item_ids, expl_embeds = neg_emb)
+                            posexplscore = model(user_ids = user_ids, item_ids = item_ids, expl_embeds = pos_emb,mild_factor_scale=1/args.temperature)
+                            negexplscore = model(user_ids = user_ids, item_ids = item_ids, expl_embeds = neg_emb,mild_factor_scale=1/args.temperature)
                         
                         loss = bpr_loss(posexplscore, negexplscore)
                         msg = ""
@@ -383,9 +389,9 @@ def main(args, train_loader, val_loader, user_num, item_num, local_rank):
                                 preds = model.module(user_ids, item_ids, expl_embeds)
                             else:
                                 preds = model(user_ids, item_ids, expl_embeds)
-
+                            
                             pred_scores = preds / args.temperature
-                            pred_scores = torch.sigmoid(preds).squeeze()
+                            pred_scores = torch.sigmoid(pred_scores).squeeze()
 
                             # Separate scores
                             pop_scores = pred_scores[pop_label == 1]
@@ -411,7 +417,7 @@ def main(args, train_loader, val_loader, user_num, item_num, local_rank):
             avg_val_loss = total_val_loss / max(1,num_batches_val)
             print(f"Epoch {epoch+1} Validation Loss: {avg_val_loss:.4f}")
             
-            if avg_val_loss < best_val_loss:
+            if (avg_val_loss + EPSILON) < best_val_loss:
                 best_val_loss = avg_val_loss
                 early_stopping_counter = 0
                 save_checkpoint(model, output_dir, "BEST")
