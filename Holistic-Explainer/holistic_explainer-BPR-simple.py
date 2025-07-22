@@ -175,9 +175,9 @@ def main(args, train_loader, val_loader, user_num, item_num, local_rank):
             verify_model_weights(model)
         
         if args.distributed:
-            model.module.freeze_components(["user_embed", "item_embed"])
+            model.module.freeze_component(["user_embed", "item_embed"])
         else:
-            model.freeze_components(["user_embed", "item_embed"])
+            model.freeze_component(["user_embed", "item_embed"])
     
     
     for epoch in range(args.epochs):
