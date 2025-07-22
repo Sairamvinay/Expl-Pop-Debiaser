@@ -3,6 +3,10 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
+def standardize(x,epsilon=1e-6):
+    x_std = (x - x.mean()) / (x.std() + epsilon)
+    return x_std
+
 # Stage 2: Fairness Loss
 def fairness_disparity_loss(pop_scores, niche_scores, disp_ratio):
     pop_sum = pop_scores.sum()
