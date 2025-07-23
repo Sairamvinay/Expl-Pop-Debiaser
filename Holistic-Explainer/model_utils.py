@@ -100,22 +100,27 @@ class DeepFM(nn.Module):
         i = self.item_embed(item_ids)
         
         expl_embeds = F.normalize(expl_embeds, p=2, dim=-1)
-        
+        # # print("expl embeds after normalize: ",expl_embeds.abs().mean())
         e = self.expl_proj(expl_embeds)
 
         feats = torch.stack([u, i, e], dim=1)  # shape (B, 3, D)
         concat_feats = torch.cat([u, i, expl_embeds], dim=-1)  # shape (B, 2*ID_dim + expl_dim)
         # concat_feats = torch.cat([u, i, e],dim=-1) # shape (B, 3* ID_dim)
-        concat_feats = self.input_norm(concat_feats)
-
+        # concat_feats = self.input_norm(concat_feats)
+        
+        # # print("concat as input to DEEP: ",concat_feats.abs().mean())
 
         linear_out = self.linear(concat_feats) # self.linear_norm(self.linear(concat_feats))
         fm_out = self.fm_interaction(feats) # self.fm_norm(self.fm_interaction(feats))
         
         deep_out = self.deep(concat_feats)
+        # # print("Deep before final layer: ",deep_out.abs().mean())
         deep_out = self.deep_out(self.dropout(deep_out))
         
         score = linear_out + fm_out + deep_out
+        # # print("Linear out: ",linear_out)
+        # # print("FM out: ",fm_out)
+        # # print("Deep out: ",deep_out)
         score *= mild_factor_scale
         # score = torch.clamp(score, min=-10.0, max=10.0)  # prevent exploding logits
         return score
