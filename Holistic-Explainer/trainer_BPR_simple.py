@@ -26,15 +26,26 @@ def create_opt_lr(model,data_len,gradient_accumulation_steps,num_epochs,warmup_r
     no_decay = ["bias", "LayerNorm.weight"]
     optimizer_grouped_parameters = [
         {
-            "params": [p for n, p in model.named_parameters() if not any(nd in n for nd in no_decay)],
+            "params": [p for n, p in model.named_parameters() if (p.requires_grad) and not any(nd in n for nd in no_decay)],
             "weight_decay": weight_decay,
         },
         {
-            "params": [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)],
+            "params": [p for n, p in model.named_parameters() if (p.requires_grad) and any(nd in n for nd in no_decay)],
             "weight_decay": 0.0,
         },
     ]
     
+    named_grouped_parameters = [
+        {
+            "params": [n for n, p in model.named_parameters() if (p.requires_grad) and not any(nd in n for nd in no_decay)],
+            "weight_decay": weight_decay,
+        },
+        {
+            "params": [n for n, p in model.named_parameters() if (p.requires_grad) and any(nd in n for nd in no_decay)],
+            "weight_decay": 0.0,
+        },
+    ]
+    print("Optimizer groups: ",named_grouped_parameters)
     optimizer = AdamW(optimizer_grouped_parameters, lr=learning_rate, eps = adam_eps)
     num_training_steps = num_epochs * data_len
     lr_scheduler = get_linear_schedule_with_warmup(optimizer,warmup_iters,t_total)
@@ -95,6 +106,8 @@ def train_custom_single(seed = 999,
     
     model = model.to(f"cuda:{gpu}")
     
+    if stage == 1:
+        model.freeze_component(["user_embed", "item_embed","input_norm"])
     optimizer,lr_scheduler = create_opt_lr(model,num_batches_train,gradient_accumulation_steps,num_epochs,warmup_ratio,learning_rate,weight_decay,adam_eps=1e-6)
 
     # Diagnostic: check optimizer param groups
@@ -116,7 +129,6 @@ def train_custom_single(seed = 999,
         if checkpoint:
             model = load_checkpoint(model, checkpoint)
         
-        model.freeze_component(["user_embed", "item_embed"])
     
     if stage == 2:
         disp_ratio = torch.tensor(1/9).to(device)

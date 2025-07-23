@@ -85,15 +85,25 @@ def create_opt_lr(model,data_len,gradient_accumulation_steps,num_epochs,warmup_r
     no_decay = ["bias", "LayerNorm.weight"]
     optimizer_grouped_parameters = [
         {
-            "params": [p for n, p in model.named_parameters() if not any(nd in n for nd in no_decay)],
+            "params": [p for n, p in model.named_parameters() if (p.requires_grad) and not any(nd in n for nd in no_decay)],
             "weight_decay": weight_decay,
         },
         {
-            "params": [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)],
+            "params": [p for n, p in model.named_parameters() if (p.requires_grad) and any(nd in n for nd in no_decay)],
             "weight_decay": 0.0,
         },
     ]
-    
+    named_grouped_parameters = [
+        {
+            "params": [n for n, p in model.named_parameters() if (p.requires_grad) and not any(nd in n for nd in no_decay)],
+            "weight_decay": weight_decay,
+        },
+        {
+            "params": [n for n, p in model.named_parameters() if (p.requires_grad) and any(nd in n for nd in no_decay)],
+            "weight_decay": 0.0,
+        },
+    ]
+    print("Optimizer groups: ",named_grouped_parameters)
     optimizer = AdamW(optimizer_grouped_parameters, lr=learning_rate, eps = adam_eps)
     num_training_steps = num_epochs * data_len
     lr_scheduler = get_linear_schedule_with_warmup(optimizer,warmup_iters,t_total)
@@ -143,6 +153,12 @@ def main(args, train_loader, val_loader, user_num, item_num, local_rank):
     
     output_dir = os.path.join(args.output_dir, args.dataset, f"stage-{args.stage}")
     
+    if args.stage == 1:
+        if args.distributed:
+            model.module.freeze_component(["user_embed", "item_embed","input_norm"])
+        else:
+            model.freeze_component(["user_embed", "item_embed","input_norm"])
+    
     os.makedirs(output_dir, exist_ok=True)
     
     optimizer,lr_scheduler = create_opt_lr(model,num_batches_train,args.gradient_accumulation_steps,args.epochs,args.warmup_ratio,args.learning_rate,args.weight_decay,adam_eps=1e-6)
@@ -174,11 +190,6 @@ def main(args, train_loader, val_loader, user_num, item_num, local_rank):
             model = load_checkpoint(model, args.checkpoint)
             verify_model_weights(model)
         
-        if args.distributed:
-            model.module.freeze_component(["user_embed", "item_embed"])
-        else:
-            model.freeze_component(["user_embed", "item_embed"])
-    
     
     for epoch in range(args.epochs):
         model.train()
@@ -420,7 +431,7 @@ def main(args, train_loader, val_loader, user_num, item_num, local_rank):
             if (avg_val_loss + EPSILON) < best_val_loss:
                 best_val_loss = avg_val_loss
                 early_stopping_counter = 0
-                save_checkpoint(model, output_dir, "BEST")
+                save_checkpoint(model, output_dir, "BEST",compress=False)
                 terminate = False
             else:
                 early_stopping_counter += 1
@@ -433,7 +444,7 @@ def main(args, train_loader, val_loader, user_num, item_num, local_rank):
         if args.distributed:
             dist.broadcast(terminate, 0)
         if terminate:
-            save_checkpoint(model, output_dir, epoch)
+            save_checkpoint(model, output_dir, epoch,compress=True)
             
             print("Exitting now...")
             if (not args.distributed) or (args.distributed and dist.get_rank() == 0):
@@ -449,9 +460,9 @@ def main(args, train_loader, val_loader, user_num, item_num, local_rank):
         
         # Save the model
         if (epoch % check_step == 0):
-            save_checkpoint(model, output_dir, epoch)
+            save_checkpoint(model, output_dir, epoch,compress=True)
                 
-    save_checkpoint(model, output_dir, epoch)
+    save_checkpoint(model, output_dir, epoch,compress=False)
     print("Training Complete. Model saved.")
     if (not args.distributed) or (args.distributed and dist.get_rank() == 0):
         print(f'It took {time() - start:.1f}s')
