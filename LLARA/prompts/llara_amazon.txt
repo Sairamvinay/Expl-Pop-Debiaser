@@ -1,0 +1,3 @@
+#Question: This user has given high ratings to the following products: [HistoryHere]. Using all available information, make a prediction about whether the user would enjoy the product titled [ItemHere]? Answer with "Yes" or "No". \n#Answer:
+#Question: This user has given high ratings to the following products: [HistoryHere]. Given the previous information, please predict whether the user would like the product with the title [ItemHere]? Answer with "Yes" or "No". \n#Answer:
+#Question: The interaction history of products for this user is: [HistoryHere]. Using all available information, make a prediction about whether the user would enjoy the product titled [ItemHere]? Answer with "Yes" or "No". \n#Answer:
