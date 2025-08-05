@@ -41,6 +41,8 @@ def parse_args():
     parser.add_argument("--softmax",action='store_true',help='Softmax or not (sigmoid is default)?')
     parser.add_argument('--stage',type=int, default=0, help='Which training stage: 0 (Utility training) ; 1(Explanation pairwise) or 2(Fairness Disparity)') 
     
+    parser.add_argument("--mode",type=int, default=1, help='Which mode of evaluation within stage: 1 (Pos Expl only) ; 2(Neg Expl Only) or 3 (Zero Expl only)',choices=[1,2,3]) 
+    
     parser.add_argument("--local-rank",default=-1,type=int, help='local-rank (GPU)')
 
     args = parser.parse_args()
@@ -56,10 +58,17 @@ def main(args, eval_loader, user_num, item_num, local_rank):
     seedSet(args.seed)
     model_name = "meta-llama/Llama-2-7b-hf" # "meta-llama/Llama-3.2-1B" 
     
-    os.makedirs(os.path.join(args.output_dir,f"stage-{args.stage}"),exist_ok=True)
+    suffix = ''
+    if args.mode == 1:
+        suffix = 'POS-only-EXPLS'
+    elif args.mode == 2:
+        suffix = 'NEG-only-EXPLS'
+    elif args.mode == 3:
+        suffix = 'ZERO-EXPLS'
+        
+    os.makedirs(os.path.join(args.output_dir,f"stage-{args.stage}-{suffix}"),exist_ok=True)
     early_stopping_patience = 3
-    AUTH_TOKEN = "YOUR_HF_TOKEN"
-    
+    AUTH_TOKEN="YOUR_HF_TOKEN"
     # =============================================================
     # Step 2. Basic Tokenizer Setup
     # =============================================================
@@ -93,7 +102,7 @@ def main(args, eval_loader, user_num, item_num, local_rank):
     
     with torch.no_grad():
         for stepv, batchv in enumerate(tqdm(eval_loader)):
-            if stepv > num_batches_val:
+            if stepv >= num_batches_val:
                 break
             torch.cuda.empty_cache()
             with autocast():
@@ -107,8 +116,14 @@ def main(args, eval_loader, user_num, item_num, local_rank):
                     expl_embeds = torch.zeros((len(user_ids), encoder.config.hidden_size), dtype=torch.float16).to(device) 
                 
                 elif args.stage == 1:
-                    # expl_embeds = torch.zeros((len(user_ids), encoder.config.hidden_size), dtype=torch.float16).to(device) 
-                    expl_embeds = get_explanation_embedding(encoder,tokenizer,batchv['pos-expl'],device)
+                    if args.mode == 1:
+                        expl_embeds = get_explanation_embedding(encoder,tokenizer,batchv['pos-expl'],device)
+                    
+                    elif args.mode == 2:
+                        expl_embeds = get_explanation_embedding(encoder,tokenizer,batchv['neg-expl'],device)
+                    
+                    elif args.mode == 3:
+                        expl_embeds = torch.zeros((len(user_ids), encoder.config.hidden_size), dtype=torch.float16).to(device)
                 
                 else:
                     expl_embeds = get_explanation_embedding(encoder,tokenizer,batchv['pos-expl'],device)
@@ -182,7 +197,7 @@ def main(args, eval_loader, user_num, item_num, local_rank):
     
     
     if not args.debug:
-        save_path = os.path.join(args.output_dir,f"stage-{args.stage}",f"DEEPFM-{args.dataset}-preds.pkl")
+        save_path = os.path.join(args.output_dir,f"stage-{args.stage}-{suffix}",f"DEEPFM-{args.dataset}-preds.pkl")
         save_pickle({'ui_scores':ui_scores,'gt':gt, 'golds':golds, 'preds':preds},save_path)
     
     top = [1,2,3,5,10,20]

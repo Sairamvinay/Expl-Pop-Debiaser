@@ -6,6 +6,31 @@ import gzip
 import re
 import sys
 
+def chatgpt_prompt(data_point):
+    system_prompt = f"""You are a helpful assistant that generates concise and reasonable explanations.
+    {data_point['instruction']}. Write responses within {data_point['maxlen']} words.
+    """
+    
+    user_prompt = f"{data_point['input']}"
+    
+    return [system_prompt,user_prompt]
+
+
+# def chatgpt_prompt(data_point):
+#     system_prompt = f"You are a helpful assistant that generates concise and reasonable explanations for user purchases based on their shopping history. Write responses within {data_point['maxlen']} words."
+    
+#     user_prompt = f"""
+# ### Instruction:
+# {data_point["instruction"]}
+
+# ### Input:
+# {data_point["input"]}
+# """
+    
+#     return [system_prompt,user_prompt]
+
+def build_explain_chatgptprompt_beauty(purchase_history, target_item_profile,maxlen=50):
+    return chatgpt_prompt({"instruction": "Given the profiles of the purchasing history of this consumer, can you provide a reason for why this consumer purchased the current product? Answer with one sentence with the following format: \"The consumer purchased this product because ...\"","input": f"Profiles of Purchasing History: {purchase_history}\n\nCurrent Product Profile: {target_item_profile}\n",'maxlen':maxlen}), chatgpt_prompt({"instruction": "Given the profiles of the purchasing history of this consumer, can you provide a reason for why this consumer did not purchase the current product? Answer with one sentence with the following format: \"The consumer did not purchase this product because ...\"","input": f"Profiles of Purchasing History: {purchase_history}\n\nCurrent Product Profile: {target_item_profile}\n",'maxlen':maxlen})
 
 def build_explain_prompt_beauty(purchase_history, target_item_profile):
     

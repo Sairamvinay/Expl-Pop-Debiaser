@@ -1,7 +1,7 @@
 import os
 import random
 import numpy as np
-from collections import Counter
+from collections import Counter, defaultdict
 from tqdm import tqdm
 from data_utils import *
 from torch.utils.data import Dataset, DataLoader, RandomSampler, DistributedSampler
@@ -33,6 +33,20 @@ class SimpleBPRTestDataset(Dataset):
         self.sample_numbers = 100
         self.expls = expls
         
+        self.user_counts = defaultdict(int)
+        self.item_counts = defaultdict(int)
+        
+        for line in self.sequential_data:
+            user, items = line.strip().split(' ',1)
+            items = items.split(' ')
+            items = [int(x) for x in items]
+            items = items[:-1] # exclude test items
+            user = int(user)
+            self.user_counts[user] = len(items)
+            for item in items:
+                self.item_counts[item] += 1
+        
+        
         self.targetItems = set(targetItems)
         self.user_num = user_num + 1
         self.item_num = item_num + 1
@@ -49,6 +63,13 @@ class SimpleBPRTestDataset(Dataset):
         for i in range(self.total_length - curr):
             self.datum_info.append((i + curr, i // self.sample_numbers, i % self.sample_numbers))
         curr = self.total_length
+    
+    def get_user_coeff(self, user):
+        # +1 since we adjust for embedding in __getitem__
+        return (self.user_counts[user + 1] / max(self.user_counts.values()))
+    
+    def get_item_coeff(self, item):
+        return (self.item_counts[item] / max(self.item_counts.values()))
 
     def __getitem__(self, idx):
         datum_info_idx = self.datum_info[idx]

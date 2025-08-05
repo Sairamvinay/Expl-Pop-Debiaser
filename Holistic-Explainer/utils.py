@@ -543,7 +543,7 @@ def evaluate_once(topk_preds, groundtruth):
     }
 
 
-def evaluate_all(user_item_scores, groudtruth, topk=10):
+def evaluate_all(user_item_scores, groudtruth, topk=10,debug=True):
     """Evaluate all user-items performance.
     Args:
         user_item_scores: dict with key = <item_id>, value = <user_item_score>.
@@ -581,8 +581,8 @@ def evaluate_all(user_item_scores, groudtruth, topk=10):
     mrr = mean_reciprocal_rank(rs)
     msg = "\nNDCG@{}\tRec@{}\tHits@{}\tPrec@{}\tMAP@{}\tMRR@{}".format(topk, topk, topk, topk, topk, topk)
     msg += "\n{:.4f}\t{:.4f}\t{:.4f}\t{:.4f}\t{:.4f}\t{:.4f}".format(avg_ndcg, avg_recall, avg_hit, avg_prec, map_, mrr)
- 
-    print(msg)
+    if debug:
+        print(msg)
     res = {
         'ndcg': avg_ndcg,
         'map': map_,

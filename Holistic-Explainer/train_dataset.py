@@ -73,18 +73,22 @@ class ExplBPRDataset(Dataset):
 
 
 
-PROMPT_MAPS = {'beauty':build_explain_prompt_beauty,'clothing':build_explain_prompt_clothing,'yelp':build_explain_prompt_yelp_general}
+PROMPT_MAPS = {'beauty':build_explain_prompt_beauty,
+               'clothing':build_explain_prompt_clothing,
+               'yelp':build_explain_prompt_yelp_general,
+               'beauty-chatgpt':build_explain_chatgptprompt_beauty,
+              }
 
 THRESHOLDS = {'beauty':4, 'clothing':4,'yelp':4}
 MAX_PREFS  = {'beauty':4, 'clothing':4,'yelp':0}
 
 
 class ExplGenTrainData:
-    def __init__(self, dataset,data_path = '../data',mode='train'):
+    def __init__(self, dataset,data_path = '../data',mode='train',chatgpt=False,maxlen=50):
         self.data_path = data_path
         self.dataset = dataset
         self.sample_type = 'random'
-        self.MAX_HISTORY_LEN = 5
+        self.MAX_HISTORY_LEN = 5 if not chatgpt else 3
         
         
         self.mode = mode
@@ -135,7 +139,16 @@ class ExplGenTrainData:
         
         self.train_negative = load_pickle(os.path.join(self.data_path, self.dataset, 'train-negatives.pkl'))
         
-        self.build_expl_inputs = PROMPT_MAPS[self.dataset]
+        name = self.dataset
+        if chatgpt:
+            name += "-chatgpt"
+            self.kwargs = {'maxlen':maxlen}
+            self.LIMIT = 100
+        else:
+            self.kwargs = {}
+            self.LIMIT=1000 # assuming all datasets stay under 1000 chars length
+        print("Mapping name for prompts: ",name,' with kwargs: ',self.kwargs)
+        self.build_expl_inputs = PROMPT_MAPS[name]
         print('compute_datum_info')
         self.total_length = 0
         self.datum_info = []
@@ -148,8 +161,8 @@ class ExplGenTrainData:
             self.total_length = 0
             curr = 0
             for i,user in enumerate(list(self.user_items.keys())):
-                num_items = len(self.user_items[user]) - 1 # exclude test
-                for j in range(num_items * 2):
+                num_items = len(self.user_items[user]) - 1 + len(self.train_negative[int(user) - 1][1:])# exclude test
+                for j in range(num_items):
                     self.datum_info.append((curr,int(user)-1,j))
                     self.total_length += 1
                     curr += 1
@@ -160,10 +173,10 @@ class ExplGenTrainData:
 
     def get_title(self, target_item):
         if self.dataset == 'yelp':
-            return clean_text(self.meta_data[self.meta_dict[self.id2item[str(target_item)]]].get('name','unknown title'))
+            return clean_text(self.meta_data[self.meta_dict[self.id2item[str(target_item)]]].get('name','unknown title'))[:self.LIMIT]
         
         else:
-            return clean_text(self.meta_data[self.meta_dict[self.id2item[str(target_item)]]].get('title','unknown title'))
+            return clean_text(self.meta_data[self.meta_dict[self.id2item[str(target_item)]]].get('title','unknown title'))[:self.LIMIT]
     
     def __len__(self):
         return self.total_length
@@ -207,6 +220,8 @@ class ExplGenTrainData:
         assert int(user_id) - 1 == datum_idx
         assert user_id == self.train_negative[int(user_id)-1][0]
         
+        pos_items = list(set(pos_items))
+        neg_items = list(set(neg_items))
         pos_items = [int(x) for x in pos_items]
         neg_items = [int(x) for x in neg_items]
         
@@ -228,8 +243,15 @@ class ExplGenTrainData:
             
         else:
             # -ve item
-            
-            target_item = neg_items[(candidate_item_idx % len(pos_items))]
+#             try:
+#                 target_item = neg_items[(candidate_item_idx % len(pos_items))]
+#             except:
+#                 print("Pos items: ",pos_items)
+#                 print("Neg items: ",neg_items)
+#                 print("user_id: ",user_id)
+#                 print("candidate item idx: ",candidate_item_idx)
+#                 exit()
+            target_item = neg_items[(candidate_item_idx % len(neg_items))] # changed to neg items JULY 31
             target_label = 0
             target_text = "No"
             target_item_title = self.generate_item_profile(target_item)
@@ -238,7 +260,7 @@ class ExplGenTrainData:
         purchase_history = purchase_history.tolist()
         purchase_history_titles = [self.generate_item_profile(item) for item in purchase_history]
         
-        pos_prompt, neg_prompt = self.build_expl_inputs(purchase_history=', '.join(purchase_history_titles), target_item_profile=target_item_title)
+        pos_prompt, neg_prompt = self.build_expl_inputs(purchase_history=', '.join(purchase_history_titles), target_item_profile=target_item_title,**self.kwargs)
         
         out_dict = {"pos_prompt":pos_prompt,"neg_prompt":neg_prompt,'target_item':target_item_title,
                     "label":target_label, 'user_id':int(user_id) - 1,'item_id':int(target_item)}
