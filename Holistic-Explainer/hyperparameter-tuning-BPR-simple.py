@@ -187,7 +187,7 @@ if __name__ == "__main__":
     
     local_rank = args.local_rank 
     
-    SAVE_DIR = f"optuna_results/{dataset}"  # Directory to store trial JSON files
+    SAVE_DIR = f"optuna_results/{dataset}/stage-{stage}/"  # Directory to store trial JSON files
     
     os.makedirs(SAVE_DIR, exist_ok=True)
     
