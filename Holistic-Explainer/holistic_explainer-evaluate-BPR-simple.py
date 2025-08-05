@@ -59,16 +59,20 @@ def main(args, eval_loader, user_num, item_num, local_rank):
     model_name = "meta-llama/Llama-2-7b-hf" # "meta-llama/Llama-3.2-1B" 
     
     suffix = ''
-    if args.mode == 1:
-        suffix = 'POS-only-EXPLS'
-    elif args.mode == 2:
-        suffix = 'NEG-only-EXPLS'
-    elif args.mode == 3:
-        suffix = 'ZERO-EXPLS'
+    if args.stage == 1:
+        if args.mode == 1:
+            suffix = '-POS-only-EXPLS'
+        elif args.mode == 2:
+            suffix = '-NEG-only-EXPLS'
+        elif args.mode == 3:
+            suffix = '-ZERO-EXPLS'
+    else:
+        suffix = ''
         
-    os.makedirs(os.path.join(args.output_dir,f"stage-{args.stage}-{suffix}"),exist_ok=True)
+    os.makedirs(os.path.join(args.output_dir, args.dataset,f"stage-{args.stage}{suffix}"),exist_ok=True)
     early_stopping_patience = 3
-    AUTH_TOKEN="YOUR_HF_TOKEN"
+    
+    AUTH_TOKEN = "YOUR_HF_TOKEN"
     # =============================================================
     # Step 2. Basic Tokenizer Setup
     # =============================================================
@@ -83,7 +87,7 @@ def main(args, eval_loader, user_num, item_num, local_rank):
     model = model.to(f"cuda:{local_rank}")
     
     if args.debug:
-        num_batches_val = 10
+        num_batches_val = 100
     else:
         num_batches_val = args.num_batches_val if args.num_batches_val > -1 else len(eval_loader)
         print(f"num_batches_val: {num_batches_val}\n")
@@ -197,7 +201,7 @@ def main(args, eval_loader, user_num, item_num, local_rank):
     
     
     if not args.debug:
-        save_path = os.path.join(args.output_dir,f"stage-{args.stage}-{suffix}",f"DEEPFM-{args.dataset}-preds.pkl")
+        save_path = os.path.join(args.output_dir, args.dataset,f"stage-{args.stage}{suffix}",f"DEEPFM-{args.dataset}-preds.pkl")
         save_pickle({'ui_scores':ui_scores,'gt':gt, 'golds':golds, 'preds':preds},save_path)
     
     top = [1,2,3,5,10,20]
