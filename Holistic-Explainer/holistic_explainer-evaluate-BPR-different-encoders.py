@@ -1,0 +1,308 @@
+import torch
+from transformers import AutoTokenizer, AutoModel
+from torch.cuda.amp import autocast
+from tqdm import tqdm
+import pickle
+import os
+import argparse
+from time import time
+import numpy as np
+from packaging import version
+from datetime import timedelta
+from huggingface_hub import hf_hub_download
+from gensim.models import KeyedVectors
+from data_utils import load_pickle, save_pickle, load_json, readTargetItem
+from model_utils import DeepFM
+from utils import seedSet,load_checkpoint,getBasicScores,getFairnessScores,area_curve_metric, verify_model_weights
+from test_dataset_BPR import get_eval_dataset_loader
+
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
+
+class Word2VecEncoder(torch.nn.Module):
+    def __init__(self, w2v, device):
+        super().__init__()
+        self.w2v = w2v
+        self.hidden_size = w2v.vector_size
+        self.device = device
+
+    def forward(self, input_ids=None, attention_mask=None, **kwargs):
+        # Here input_ids would be raw text strings
+        batch_embeddings = []
+        for text in input_ids:  # treat input_ids as list of strings
+            tokens = text.lower().split()
+            vecs = [self.w2v[w] for w in tokens if w in self.w2v]
+            if not vecs:
+                vecs = [np.zeros(self.w2v.vector_size)]
+            emb = np.mean(vecs, axis=0)
+            batch_embeddings.append(np.array(emb))
+        batch_embeddings = torch.tensor(batch_embeddings, dtype=torch.float16, device = self.device)
+        return {"last_hidden_state": batch_embeddings}
+
+def get_explanation_embedding_word2vec(encoder,tokenizer,text,device):
+    output = encoder(input_ids = text)
+    return output['last_hidden_state']
+    
+def get_explanation_embedding_bert(encoder, tokenizer, text, device):
+    inputs = tokenizer(text, return_tensors="pt", truncation=True, padding=True,max_length=512).to(device)
+    with torch.no_grad():
+        output = encoder(**inputs)
+    
+    return output.last_hidden_state.mean(dim=1)  # Mean pooling
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(description="Argument parser for holistic explainer script")
+
+    parser.add_argument("--output_dir",type=str,default='top-preds/',help='Path to save the model recommendation results')
+    
+    parser.add_argument('--seed',type=int,default=999,help='Seed value')
+    parser.add_argument('--debug',action='store_true',help='Debug or not?')
+    parser.add_argument("--num_workers",type=int,default=4,help='DataLoader Num Workers')
+    
+    parser.add_argument("--batch_size",type=int,default=100,help='Batch Size for evaluation')
+    parser.add_argument('--id_embed_dim',type=int,default=64,help='DeepFM ID Embedding Dimension')
+    parser.add_argument("--hidden_dim",type=str, default='[256,128,64]', help='DeepFM Hidden Dimension List: provide as \"[256,128,64]\"')
+    parser.add_argument("--dropout",type=float,default=0.2,help = 'Dropout for DeepFM layers')
+    
+    parser.add_argument('--data_path', type=str, required=True, help='Path to the dataset')
+    parser.add_argument("--expl_path",type=str,default='generated-expls/',help='Path to load explanations: effective from stage 1')
+    parser.add_argument('--dataset', type=str, required=True, help='Name of the dataset: beauty/yelp/clothing')
+    parser.add_argument('--num_batches_val', type=int, default=-1, help="Number of batches for validation (-1 for all)")
+    
+    parser.add_argument("--checkpoint",type=str, default=None, help = 'Load stage 1 checkpoints for stage 2 training and stage 0 checkpoints for stage 1 training')
+    parser.add_argument("--temperature",type=float,default=1.0,help = 'Temperature for sigmoid')
+    parser.add_argument("--softmax",action='store_true',help='Softmax or not (sigmoid is default)?')
+    parser.add_argument('--stage',type=int, default=0, help='Which training stage: 0 (Utility training) ; 1(Explanation pairwise) or 2(Fairness Disparity)') 
+    parser.add_argument("--encoder_type",type=str,choices=["bert","w2v"],default='bert')
+    
+    parser.add_argument("--mode",type=int, default=1, help='Which mode of evaluation within stage: 1 (Pos Expl only) ; 2(Neg Expl Only) or 3 (Zero Expl only)',choices=[1,2,3]) 
+    
+    parser.add_argument("--local-rank",default=-1,type=int, help='local-rank (GPU)')
+
+    args = parser.parse_args()
+    return args
+
+
+
+def main(args, eval_loader, user_num, item_num, local_rank):
+    start = time()
+    device = torch.device(f"cuda:{local_rank}")
+    device_map={"": local_rank}
+    torch.cuda.set_device(device)  # Assign unique GPU to each rank
+    seedSet(args.seed)
+    
+    prefix = args.encoder_type
+    suffix = ''
+    if args.stage == 1:
+        if args.mode == 1:
+            suffix = '-POS-only-EXPLS'
+        elif args.mode == 2:
+            suffix = '-NEG-only-EXPLS'
+        elif args.mode == 3:
+            suffix = '-ZERO-EXPLS'
+    else:
+        suffix = ''
+        
+    os.makedirs(os.path.join(args.output_dir, args.dataset,f"{prefix.upper()}-stage-{args.stage}{suffix}"),exist_ok=True)
+    early_stopping_patience = 3
+    AUTH_TOKEN = "YOUR_HF_TOKEN"
+    if args.encoder_type == "bert":
+        model_name = "bert-base-uncased"
+        encoder = AutoModel.from_pretrained(model_name,torch_dtype=torch.float16,token=AUTH_TOKEN,device_map=device_map,output_hidden_states=True).eval()
+
+        # =============================================================
+        # Step 2. Basic Tokenizer Setup
+        # =============================================================
+        tokenizer = AutoTokenizer.from_pretrained(model_name,use_auth_token=AUTH_TOKEN)
+        tokenizer.pad_token_id = 0 # tokenizer.eos_token_id yields None: AUG 21
+        tokenizer.padding_side='left' # ADDED BY ME to avoid error for decoder-only model
+        print("Tokenizer pad token: ",tokenizer.pad_token)
+        get_explanation_embedding = get_explanation_embedding_bert
+        hidden_size = encoder.config.hidden_size
+        print("BERT hidden size: ",hidden_size)
+    
+    else:
+        model_path = hf_hub_download(repo_id="fse/word2vec-google-news-300",filename='word2vec-google-news-300.model.vectors.npy')
+        model_path = hf_hub_download(repo_id="fse/word2vec-google-news-300",filename='word2vec-google-news-300.model')
+        w2v = KeyedVectors.load(model_path, mmap='r')
+        hidden_size = w2v.vector_size
+        print("W2V Vector size:", w2v.vector_size)
+        print("First word:", w2v.index_to_key[0])
+        encoder = Word2VecEncoder(w2v,device)
+        encoder = encoder.to(device)
+
+        get_explanation_embedding = get_explanation_embedding_word2vec
+        tokenizer = None
+    
+    
+    model = DeepFM(user_num = user_num, item_num = item_num, id_embed_dim = args.id_embed_dim, expl_embed_dim = hidden_size, hidden_dims=eval(args.hidden_dim), dropout_rate = args.dropout).to(device)
+    
+    # model = model.to(f"cuda:{local_rank}")
+    
+    if args.debug:
+        num_batches_val = 100
+    else:
+        num_batches_val = args.num_batches_val if args.num_batches_val > -1 else len(eval_loader)
+        print(f"num_batches_val: {num_batches_val}\n")
+    
+    to_print = True
+    
+    if args.checkpoint:
+        model = load_checkpoint(model, args.checkpoint)
+        verify_model_weights(model)
+        
+    model.eval()
+    all_info = []
+    golds,preds = [],[]
+    
+    m = torch.nn.Softmax(dim=1)
+    
+    with torch.no_grad():
+        for stepv, batchv in enumerate(tqdm(eval_loader)):
+            if stepv >= num_batches_val:
+                break
+            torch.cuda.empty_cache()
+            with autocast():
+                user_ids = torch.tensor(batchv['UserID']).to(device)
+                item_ids = torch.tensor(batchv['ItemID']).to(device)
+                labels = torch.tensor(batchv['label'],dtype=torch.float16).to(device)
+                pos_item = batchv['pos-item']
+                
+                if args.stage == 0:
+                    # Select appropriate explanation embeddings
+                    expl_embeds = torch.zeros((len(user_ids), hidden_size), dtype=torch.float16).to(device) 
+                
+                elif args.stage == 1:
+                    if args.mode == 1:
+                        expl_embeds = get_explanation_embedding(encoder,tokenizer,batchv['pos-expl'],device)
+                    
+                    elif args.mode == 2:
+                        expl_embeds = get_explanation_embedding(encoder,tokenizer,batchv['neg-expl'],device)
+                    
+                    elif args.mode == 3:
+                        expl_embeds = torch.zeros((len(user_ids), hidden_size), dtype=torch.float16).to(device)
+                
+                else:
+                    expl_embeds = get_explanation_embedding(encoder,tokenizer,batchv['pos-expl'],device)
+                    # expl_embeds = torch.zeros((len(user_ids), encoder.config.hidden_size), dtype=torch.float16).to(device) 
+                
+                # Forward pass
+                logits = model(user_ids, item_ids, expl_embeds,mild_factor_scale=1/args.temperature).squeeze()
+                # logits /= args.temperature
+                
+                # logits /= logits.abs().max()
+                # logits = torch.clamp(logits, min=-5, max=5)
+                
+                if args.softmax:
+                    pred_scores = torch.tensor(logits,dtype=torch.float32).softmax(dim=-1)
+                else:
+                    pred_scores = torch.sigmoid(logits)
+                
+                _, indices = torch.sort(pred_scores, descending=True)
+                
+                if args.debug:
+
+                    print("User: ",user_ids)
+                    print("Item: ",item_ids)
+                    print("Pos items: ",pos_item)
+                    print("input user size:",user_ids.shape , ' items shape: ',item_ids.shape, ' expl_embeds shape:',expl_embeds.shape)
+                    print("labels shape: ",labels.shape)
+                    if args.softmax:
+                        print("preds before softmax: ",logits.shape, ' ',logits)
+                        print("preds after softmax: ",pred_scores)
+                    else:
+                        print("preds before sigmoid: ",logits.shape, ' ',logits)
+                        print("preds after sigmoid: ",pred_scores)
+                    
+                    print("Sorted with dimension 0: ",_)
+                    print("Indices with dimension 0: ",indices)
+                    print("="*100)
+                else:
+                    pass                
+
+
+            torch.cuda.empty_cache()
+            del user_ids
+            del batchv
+            new_info = {}
+            new_info['target_item'] = [pos_item[0]] # same for entire batch
+            new_info['gen_item_list'] = [item_ids[_] for _ in indices[:args.batch_size]]
+            golds.extend([int(labels[_]) for _ in range(args.batch_size)])
+            preds.extend(pred_scores.float().cpu().tolist())
+            
+            all_info.append(new_info)
+                
+                
+    gt = {}
+    ui_scores = {}
+    for i, info in enumerate(all_info):
+        gt[i] = [int(info['target_item'][0])]
+        pred_dict = {}
+        for j in range(len(info['gen_item_list'])):
+            try:
+                pred_dict[int(info['gen_item_list'][j])] = -(j+1)
+            except:
+                pass
+        ui_scores[i] = pred_dict
+    
+    
+    print("# golds: ",len(golds))
+    print("# preds: ",len(preds))
+    
+    print("ATTACK UI SCORES: ",ui_scores)
+    print("ATTACK GT SCORES: ",gt)
+    
+    
+    if not args.debug:
+        save_path = os.path.join(args.output_dir, args.dataset,f"{prefix.upper()}-stage-{args.stage}{suffix}",f"DEEPFM-{args.dataset}-preds.pkl")
+        save_pickle({'ui_scores':ui_scores,'gt':gt, 'golds':golds, 'preds':preds},save_path)
+    
+    top = [1,2,3,5,10,20]
+    
+    print("Recommendation Performance")
+    _, Recommendresults = getBasicScores(ui_scores, gt, top)
+    print("\nAUC: ",area_curve_metric(golds,preds)) 
+    
+    print("Fairness Performance")
+    FairResults = getFairnessScores(ui_scores, targetItems, top,len(item2id))
+    print("Evaluation Complete.")
+    print(f'It took {time() - start:.1f}s')
+    return {'recommend_results':Recommendresults, 'fair_results':FairResults}
+    
+    
+    return
+
+if __name__ == '__main__':
+    args = parse_args()
+    
+    print("Args: ",args)
+    
+    datamaps = load_json(os.path.join(args.data_path, args.dataset, 'datamaps.json'))
+    
+    item2id = datamaps['item2id']
+    
+    user_num = len(datamaps['user2id'])
+    item_num = len(item2id)
+    
+    targetItems = readTargetItem(os.path.join(args.data_path, args.dataset, "targetItems.txt"))
+    
+    targetItems = [int(item2id[item]) for item in targetItems]
+    print("# Target Items: ",len(targetItems))
+    print("Sample Items: ",list(targetItems)[:5])
+    
+    if args.stage == 0:
+        expls = None
+    elif args.stage == 1:
+        expls = load_pickle(os.path.join(args.expl_path, args.dataset,'test.pkl'))
+    else:
+        expls = load_pickle(os.path.join(args.expl_path, args.dataset,'test.pkl'))
+    eval_loader, eval_dataset = get_eval_dataset_loader(datamaps = datamaps, targetItems = targetItems, user_num = user_num, item_num = item_num, mode='test',batch_size=args.batch_size, dataset = args.dataset, data_path = args.data_path, expls = expls, workers=args.num_workers, shuffle=False)
+    
+    user_num, item_num = eval_dataset.user_num, eval_dataset.item_num
+    
+    print("#testing samples: ",len(eval_dataset))
+    print("#testing batches: ",len(eval_loader))
+    
+    
+    main(args, eval_loader, user_num, item_num, int(args.local_rank))
+
