@@ -1,6 +1,7 @@
 import torch
 import argparse
 import os
+import csv
 import openai
 from time import time
 from utils import seedSet
@@ -19,11 +20,8 @@ def parse_args():
     parser.add_argument('--dataset', type=str, required=True, help='Name of the dataset: beauty/yelp/clothing')
     
     parser.add_argument('--output_dir', type=str, default="generated-expls-chatgpt/", help='Directory to save generated explanations')
-    parser.add_argument("--start",default=0,type=int,help='Starting index')
-    parser.add_argument("--end",default=-1,type=int,help='End index')
     
     parser.add_argument('--maxlen', type=int, default=50, help='Maximum sequence length')
-    parser.add_argument("--batch_job_id",type=str, help='Batch job ID to retrieve and process',required=True)
     parser.add_argument('--seed', type=int, default=999, help='Seed for random number generation')
     
     parser.add_argument('--debug', action='store_true', help='Debugging flag')    
@@ -32,18 +30,38 @@ def parse_args():
     return args
 
 
+def process_batch(args,start,end,batch_job_id,client):
+    batch_job = client.batches.retrieve(batch_job_id)
+    print("BATCH JOB: ",batch_job)
+    result_file_id = batch_job.output_file_id
+    result = client.files.content(result_file_id).content
+
+    result_file_name = os.path.join(f"{args.output_dir}", args.dataset,"output-files", f'batch_results_{args.dataset}-start-{start}-end-{end}.jsonl')
+    if os.path.exists(result_file_name):
+        pass
+    else:
+        with open(result_file_name, 'wb') as file:
+            file.write(result)
+    
+    results = []
+    with open(result_file_name, 'r') as file:
+        for line in file:
+            json_object = json.loads(line.strip())
+            results.append(json_object)
+    return results
 
 def main(args):
     # ==========================
     # 1. Load LLM + Tokenizer + LoRA
     # ==========================
     
-    start = time()
+    start_time = time()
     # device = torch.device(f"cuda:{args.local_rank}")
     seedSet(args.seed)
     
+    os.makedirs(os.path.join(f"{args.output_dir}", args.dataset,"output-files"), exist_ok=True)
     
-    API_KEY = "YOUR_KEY" # YOUR OPENAI API_KEY to be added
+    API_KEY = "YOUR_API_KEY"  # YOUR OPENAI API_KEY to be added
     client = openai.OpenAI(api_key=API_KEY)
     MODEL_NAME = "gpt-4.1-mini"
     
@@ -65,21 +83,19 @@ def main(args):
     print("="*50)
     print("Retrieving Samples from served API requests")
     
-    batch_job = client.batches.retrieve(args.batch_job_id)
-    print("BATCH JOB: ",batch_job)
-    result_file_id = batch_job.output_file_id
-    result = client.files.content(result_file_id).content
-    start = args.start
-    end = len(keys) if args.end == -1 else args.end
-    result_file_name = os.path.join(f"{args.output_dir}", args.dataset, f'batch_results_{args.dataset}-start-{start}-end-{end}.jsonl')
-    with open(result_file_name, 'wb') as file:
-        file.write(result)
+    # Open the CSV file
+    with open("batches-retrieve.csv", newline="") as csvfile:
+        reader = csv.DictReader(csvfile)
+        results = []
+        for idx, row in tqdm(enumerate(reader)):
+            print(f"Row {idx}: batch_id={row['batch_id']}, start={row['start']}, end={row['end']}, is_missing={row['is_missing']}")
+            start = row['start']
+            end = row['end']
+            batch_id = row['batch_id']
+            result = process_batch(args=args,start=start,end=end,batch_job_id=batch_id,client=client)
+            results += result
     
-    results = []
-    with open(result_file_name, 'r') as file:
-        for line in file:
-            json_object = json.loads(line.strip())
-            results.append(json_object)
+    print("Len(results): ",len(results))
     
     save_path = os.path.join(args.output_dir,args.dataset,f"train.pkl")
     if os.path.exists(save_path):
@@ -115,7 +131,7 @@ def main(args):
     print(f"Saved Train Explanations to {save_path}: {len(explanations)}")
     
     print("Retrieving Complete")
-    print(f'It took {time() - start:.1f}s')
+    print(f'It took {time() - start_time:.1f}s')
     return
 
 
