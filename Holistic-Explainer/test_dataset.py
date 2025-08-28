@@ -111,16 +111,20 @@ class ExplTestDataset(Dataset):
         
         return batch_entry
 
-PROMPT_MAPS = {'beauty':build_explain_prompt_beauty,'clothing':build_explain_prompt_clothing,'yelp':build_explain_prompt_yelp_general}
-
+PROMPT_MAPS = {'beauty':build_explain_prompt_beauty,
+               'clothing':build_explain_prompt_clothing,
+               'yelp':build_explain_prompt_yelp_general,
+               'beauty-chatgpt':build_explain_chatgptprompt_beauty,
+              }
 THRESHOLDS = {'beauty':4, 'clothing':4,'yelp':4}
 MAX_PREFS  = {'beauty':4, 'clothing':4,'yelp':0}
 
 
 class ExplGenData:
-    def __init__(self, topK_path, dataset, model_name = 'TallRec-Clean',data_path = '../data',max_pref= 4):
+    def __init__(self, topK_path, dataset, model_name = 'TallRec-Clean',data_path = '../data', chatgpt=False, maxlen=50):
         self.data_path = data_path
         self.dataset = dataset
+        max_pref= 4 if not chatgpt else 3
         self.max_pref = max_pref # max. number of liked/disliked items to represent
         self.topK_path = topK_path
         self.model_name = model_name
@@ -169,7 +173,18 @@ class ExplGenData:
         file_path = os.path.join(self.topK_path, f"{self.model_name}-{self.dataset}-preds.pkl")
         print("Loading data from: ",file_path)
         self.topK_recommendations = self.get_topK_recommendations(file_path)
-        self.build_expl_inputs = PROMPT_MAPS[self.dataset]
+        
+        name = self.dataset
+        if chatgpt:
+            name += "-chatgpt"
+            self.kwargs = {'maxlen':maxlen}
+            self.LIMIT = 100
+        else:
+            self.kwargs = {}
+            self.LIMIT=1000 # assuming all datasets stay under 1000 chars length
+        print("Mapping name for prompts: ",name,' with kwargs: ',self.kwargs)
+        
+        self.build_expl_inputs = PROMPT_MAPS[name]
         self.positive_items = self.get_positive_items()
         print("len(positive items):",len(self.positive_items))
         
@@ -208,10 +223,10 @@ class ExplGenData:
 
     def get_title(self, target_item):
         if self.dataset == 'yelp':
-            return clean_text(self.meta_data[self.meta_dict[self.id2item[str(target_item)]]].get('name','unknown title'))
+            return clean_text(self.meta_data[self.meta_dict[self.id2item[str(target_item)]]].get('name','unknown title'))[:self.LIMIT]
         
         else:
-            return clean_text(self.meta_data[self.meta_dict[self.id2item[str(target_item)]]].get('title','unknown title'))
+            return clean_text(self.meta_data[self.meta_dict[self.id2item[str(target_item)]]].get('title','unknown title'))[:self.LIMIT]
     
     def get_desc(self,item):
         if self.dataset == 'yelp':
@@ -266,8 +281,8 @@ class ExplGenData:
                 liked_items = liked_items[:self.max_pref]                
                 liked_profiles = ', '.join([self.generate_item_profile(x) for x in liked_items])
                 
-                pos_prompt, neg_prompt = self.build_expl_inputs(liked_profiles, item_profile)
-                expl_dataset[(user,item)] = {"pos_prompt":pos_prompt,"neg_prompt":neg_prompt,'target_item':item_profile,"label":label}
+                pos_prompt, neg_prompt = self.build_expl_inputs(purchase_history = liked_profiles, target_item_profile=item_profile,**self.kwargs)
+                expl_dataset[(user,item)] = {"pos_prompt":pos_prompt,"neg_prompt":neg_prompt,'target_item':item_profile,"label":label,'user_id':int(user),'item_id':int(item)} # no need of -1 since user in this topK_recommendations start from 0
         
         print("#Num Pos: ",pos_sample_count)
         assert pos_sample_count == len(self.topK_recommendations) # align one GT item per user

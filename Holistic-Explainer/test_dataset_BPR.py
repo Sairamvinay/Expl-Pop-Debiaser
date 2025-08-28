@@ -36,13 +36,17 @@ class SimpleBPRTestDataset(Dataset):
         self.user_counts = defaultdict(int)
         self.item_counts = defaultdict(int)
         
+        self.val_items = defaultdict(int)
+        self.test_items = defaultdict(int)
         for line in self.sequential_data:
             user, items = line.strip().split(' ',1)
             items = items.split(' ')
             items = [int(x) for x in items]
+            self.test_items[int(user) - 1] = items[-1] # last chronological item
             items = items[:-1] # exclude test items
             user = int(user)
             self.user_counts[user] = len(items)
+            self.val_items[int(user) - 1] = items[-1] # Val item if excluding the test items
             for item in items:
                 self.item_counts[item] += 1
         
@@ -70,6 +74,12 @@ class SimpleBPRTestDataset(Dataset):
     
     def get_item_coeff(self, item):
         return (self.item_counts[item] / max(self.item_counts.values()))
+    
+    def get_val_items(self):
+        return self.val_items
+    
+    def get_test_items(self):
+        return self.test_items
 
     def __getitem__(self, idx):
         datum_info_idx = self.datum_info[idx]
