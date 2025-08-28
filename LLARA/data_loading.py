@@ -18,7 +18,7 @@ def get_dataset_object(sample_numbers,mode='train', dataset='toys',data_path="..
     
     return data_obj
     
-def get_dataset_loader(data_obj, tokenizer, prompt_path, mode='train',batch_size=16,workers=4,distributed=False,max_epochs=1,shuffle=False,fair_reweight=False):
+def get_dataset_loader(data_obj, tokenizer, prompt_path, mode='train',batch_size=16,workers=4,distributed=False,max_epochs=1,shuffle=False,fair_reweight=False,maxlen=784):
     if distributed:
         sampler = DistributedSampler(data_obj)
     else:
@@ -29,18 +29,21 @@ def get_dataset_loader(data_obj, tokenizer, prompt_path, mode='train',batch_size
         workers = 1
     
     if mode == 'train':
-        max_steps = max_epochs*(len(data_obj)//batch_size)//workers
+        # max_steps = max_epochs*(len(data_obj)//batch_size)//workers
+        max_steps = 1 # AUG 1: FIX AN ISSUE with baselines
         print(f"Max STEPS: {max_steps}")
         collater = TrainCollater(prompt_list=prompt_list,
                                  llm_tokenizer = tokenizer,
                                  train = True,
                                  max_steps=max_steps,
                                  fair_reweight=fair_reweight,
+                                 maxlen = maxlen,
                                 )
     else:
         collater = TrainCollater(prompt_list=prompt_list,
                                  llm_tokenizer = tokenizer,
                                  train=False,
+                                 maxlen = maxlen,
                                 )
     
     
@@ -68,12 +71,14 @@ class TrainCollater:
                  prompt_list=None,
                  llm_tokenizer=None,
                  train=False,
+                 maxlen=784,
                  terminator="",
                  fair_reweight=False,
                  max_steps=1):
         
         self.prompt_list = prompt_list
         self.llm_tokenizer = llm_tokenizer
+        self.maxlen = maxlen
         self.train=train
         self.terminator = terminator
         self.max_step = max_steps
@@ -123,7 +128,8 @@ class TrainCollater:
                 inputs_text,
                 return_tensors="pt",
                 padding="longest",
-                truncation=False,
+                truncation=True,
+                max_length=self.maxlen,
                 add_special_tokens=True,
                 return_attention_mask=True,
                 return_token_type_ids=True)
@@ -148,7 +154,8 @@ class TrainCollater:
                 inputs_text,
                 return_tensors="pt",
                 padding="longest",
-                truncation=False,
+                truncation=True,
+                max_length=self.maxlen,
                 add_special_tokens=True,
                 return_attention_mask=True)
             

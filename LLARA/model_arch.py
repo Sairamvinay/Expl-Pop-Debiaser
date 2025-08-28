@@ -484,12 +484,12 @@ class LLARA(nn.Module):
         inputs_embeds = torch.cat([sample_embeds, to_regress_embeds], dim=1)
         attention_mask = torch.cat([atts_samples, to_regress_tokens.attention_mask], dim=1)
         
-        if batch["flag"]:
-            for name, param in self.projector.named_parameters():
-                param.requires_grad = False
-        else:
-            for name, param in self.projector.named_parameters():
-                param.requires_grad = True
+#         if batch["flag"]:
+#             for name, param in self.projector.named_parameters():
+#                 param.requires_grad = False
+#         else:
+#             for name, param in self.projector.named_parameters():
+#                 param.requires_grad = True
         
        
 

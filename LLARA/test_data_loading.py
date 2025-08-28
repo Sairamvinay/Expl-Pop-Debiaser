@@ -80,6 +80,7 @@ class TrainCollater:
                  prompt_list=None,
                  llm_tokenizer=None,
                  train=False,
+                 maxlen=784,
                  max_steps=1):
         
         self.prompt_list = prompt_list
@@ -87,37 +88,38 @@ class TrainCollater:
         self.train=train
         self.max_step = max_steps
         self.cur_step = 1
+        self.maxlen = maxlen
 
     def __call__(self, batch):
         
         self.llm_tokenizer.padding_side = 'left'
-        instruction = random.choice(self.prompt_list)
+        instruction = self.prompt_list[0] # random.choice(self.prompt_list)
         inputs_text = instruction if isinstance(instruction, list) else [instruction] * len(batch)
         
         thresh_hold = self.cur_step/self.max_step
         p = random.random()
-        if p < thresh_hold or not self.train:
-            for i, sample in enumerate(batch):
-                input_text=inputs_text[i]
-                if '[HistoryHere]' in input_text:
-                    insert_prompt=", ".join([seq_title +' [HistoryEmb]' for seq_title in sample['InteractedItemTitles']])
-                    input_text=input_text.replace('[HistoryHere]',insert_prompt)
-                if '[ItemHere]' in input_text:
-                    insert_prompt= sample['TargetItemTitle'] +' [ItemEmb]'
-                    input_text=input_text.replace('[ItemHere]',insert_prompt)    
-                inputs_text[i]=input_text
-            flag = False
-        else:
-            for i, sample in enumerate(batch):
-                input_text=inputs_text[i]
-                if '[HistoryHere]' in input_text:
-                    insert_prompt=", ".join([seq_title + ' [PH]' for seq_title in sample['InteractedItemTitles']])
-                    input_text=input_text.replace('[HistoryHere]',insert_prompt)
-                if '[ItemHere]' in input_text:
-                    insert_prompt = sample['TargetItemTitle'] + " [PH]"
-                    input_text=input_text.replace('[ItemHere]',insert_prompt)    
-                inputs_text[i]=input_text
-            flag = True
+#         if p < thresh_hold or not self.train:
+        for i, sample in enumerate(batch):
+            input_text=inputs_text[i]
+            if '[HistoryHere]' in input_text:
+                insert_prompt=", ".join([seq_title +' [HistoryEmb]' for seq_title in sample['InteractedItemTitles']])
+                input_text=input_text.replace('[HistoryHere]',insert_prompt)
+            if '[ItemHere]' in input_text:
+                insert_prompt= sample['TargetItemTitle'] +' [ItemEmb]'
+                input_text=input_text.replace('[ItemHere]',insert_prompt)    
+            inputs_text[i]=input_text
+#         flag = False
+#         else:
+#         for i, sample in enumerate(batch):
+#             input_text=inputs_text[i]
+#             if '[HistoryHere]' in input_text:
+#                 insert_prompt=", ".join([seq_title + ' [PH]' for seq_title in sample['InteractedItemTitles']])
+#                 input_text=input_text.replace('[HistoryHere]',insert_prompt)
+#             if '[ItemHere]' in input_text:
+#                 insert_prompt = sample['TargetItemTitle'] + " [PH]"
+#                 input_text=input_text.replace('[ItemHere]',insert_prompt)    
+#             inputs_text[i]=input_text
+#         flag = True
         self.cur_step += 1
         
         targets_text = [sample['label'] for sample in batch]
@@ -129,7 +131,8 @@ class TrainCollater:
             inputs_text,
             return_tensors="pt",
             padding="longest",
-            truncation=False,
+            truncation=True,
+            max_length = self.maxlen,
             add_special_tokens=True,
             return_attention_mask=True)
 
@@ -158,7 +161,7 @@ def get_dataset_object(sample_numbers, dataset='toys',data_path="../data", sampl
     
     return data_obj
     
-def get_dataset_loader(data_obj, tokenizer, prompt_path, mode='test',batch_size=16,workers=4,distributed=False,max_epochs=1,shuffle=False):
+def get_dataset_loader(data_obj, tokenizer, prompt_path, mode='test',batch_size=16,workers=4,distributed=False,max_epochs=1,shuffle=False,maxlen=784):
     if distributed:
         sampler = DistributedSampler(data_obj)
     else:
@@ -168,7 +171,8 @@ def get_dataset_loader(data_obj, tokenizer, prompt_path, mode='test',batch_size=
     
     collater = TrainCollater(prompt_list=prompt_list,
                              llm_tokenizer = tokenizer,
-                             train=False
+                             train=False,
+                             maxlen=maxlen
                             )
     
     loader = DataLoader(

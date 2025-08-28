@@ -130,7 +130,9 @@ def train_custom(args):
     val_dataset = get_dataset_object(sample_numbers = val_sample_number, mode='val', dataset=args.dataset, data_path=args.data_path, local_rank = args.local_rank)
     
     # Step 2: Model Creation
-    
+    freeze_lora = False
+    if args.llama_ckpt:
+        freeze_lora=True
     
     model = LLARA(
         rec_model="MF",
@@ -138,7 +140,7 @@ def train_custom(args):
         item_num=max(train_dataset.item_num,val_dataset.item_num) + 1,
         embedding_size=args.rec_dim,
         freeze_rec=True,
-        freeze_lora=False,
+        freeze_lora=freeze_lora,
         freeze_proj=False,
         llama_model=base_model,
         max_txt_len=args.maxlen,
@@ -166,9 +168,9 @@ def train_custom(args):
         model = model.to(f"cuda:{args.local_rank}")
     
     # Step 3: Data Loader
-    train_loader = get_dataset_loader(data_obj = train_dataset, tokenizer = tokenizer, prompt_path = args.prompt_path, mode='train', batch_size=args.batch_size, workers=args.num_workers, distributed=args.distributed,max_epochs = args.num_epochs)
+    train_loader = get_dataset_loader(data_obj = train_dataset, tokenizer = tokenizer, prompt_path = args.prompt_path, mode='train', batch_size=args.batch_size, workers=args.num_workers, distributed=args.distributed,max_epochs = args.num_epochs,maxlen=args.maxlen)
     
-    val_loader = get_dataset_loader(data_obj = val_dataset, tokenizer = tokenizer, prompt_path = args.prompt_path, mode='val',  batch_size=args.batch_size, workers=args.num_workers, distributed=args.distributed,max_epochs = args.num_epochs)
+    val_loader = get_dataset_loader(data_obj = val_dataset, tokenizer = tokenizer, prompt_path = args.prompt_path, mode='val',  batch_size=args.batch_size, workers=args.num_workers, distributed=args.distributed,max_epochs = args.num_epochs,maxlen=args.maxlen)
     
     del tokenizer
     

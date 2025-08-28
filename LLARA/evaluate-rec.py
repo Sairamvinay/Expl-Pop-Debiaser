@@ -133,7 +133,7 @@ def evaluate_llara(seed=999,
     model.set_mode('v2')
     
     
-    eval_loader = get_dataset_loader(data_obj = eval_dataset, tokenizer = model.llama_tokenizer, prompt_path = prompt_path,mode='test',batch_size = batch_size, workers= num_workers, shuffle = False, distributed=False)
+    eval_loader = get_dataset_loader(data_obj = eval_dataset, tokenizer = model.llama_tokenizer, prompt_path = prompt_path,mode='test',batch_size = batch_size, workers= num_workers, shuffle = False, distributed=False,maxlen=args.maxlen)
     
     yes_token = model.llama_tokenizer("Yes",add_special_tokens=False).input_ids[0]
     no_token = model.llama_tokenizer("No",add_special_tokens=False).input_ids[0]
@@ -155,7 +155,7 @@ def evaluate_llara(seed=999,
         for stepv, batch in enumerate(tqdm(eval_loader)):
             
             if debug:
-                if stepv >= 10:
+                if stepv >= 100:
                     break
             
             # beam_outputs = model.predict_samples_generate(batch,generation_kwargs)

@@ -4,7 +4,6 @@ import json
 import gzip
 import random
 import pickle
-import pandas as pd
 import numpy as np
 import html
 import re

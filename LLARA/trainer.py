@@ -2,7 +2,6 @@ import os
 import random
 from tqdm import tqdm
 import numpy as np
-import pandas as pd
 import torch
 import torch.backends.cudnn as cudnn
 from torch.cuda.amp import GradScaler
