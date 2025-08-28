@@ -1,0 +1,7 @@
+# DEEPSEEK
+
+CUDA_VISIBLE_DEVICES=2,3 python3 -u -m torch.distributed.launch --nproc_per_node=2 --master_port=11111 holistic_explainer-BPR-simple.py --seed 999 --num_workers 4 --epochs 5 --batch_size 16 --id_embed_dim 64 --hidden_dim [256,128,64] --dropout 0.2799291313678057 --learning_rate 0.000991795427341774 --weight_decay 0.003642933610554146 --warmup_ratio 0.024931607986008616 --stage 1 --data_path ../data/ --dataset beauty --expl_path generated-expls-deepseek/ --output_dir snap-deepseek/ --num_batches_train -1 --num_batches_val -1 --distributed --temperature 3 --checkpoint snap/beauty/stage-0/checkpoint_epoch_BEST.pt  >> outputs/beauty/DeepSeek-runs/TRAINING-stage1-deepfm-beauty-AUG23.txt
+
+# GPT
+
+CUDA_VISIBLE_DEVICES=2,3 python3 -u -m torch.distributed.launch --nproc_per_node=2 --master_port=11111 holistic_explainer-BPR-simple.py --seed 999 --num_workers 4 --epochs 5 --batch_size 16 --id_embed_dim 64 --hidden_dim [256,128,64] --dropout 0.2799291313678057 --learning_rate 0.000991795427341774 --weight_decay 0.003642933610554146 --warmup_ratio 0.024931607986008616 --stage 1 --data_path ../data/ --dataset beauty --expl_path generated-expls-chatgpt/ --output_dir snap-chatgpt/ --num_batches_train -1 --num_batches_val -1 --distributed --temperature 3 --checkpoint snap/beauty/stage-0/checkpoint_epoch_BEST.pt  >> outputs/beauty/Chatgpt-runs/TRAINING-stage1-deepfm-beauty-AUG24.txt
