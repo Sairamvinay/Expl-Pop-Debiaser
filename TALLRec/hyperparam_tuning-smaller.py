@@ -8,7 +8,6 @@ from data_loading import get_dataset_loader
 from concurrent.futures import ProcessPoolExecutor
 from transformers import  AutoTokenizer  # noqa: F402
 
-# LOGIN CREDENTIALS: HuggingFACE in AUTH_TOKEN
 import json
 import random
 import numpy as np
@@ -50,11 +49,11 @@ val_loader = None
 
 def initialize_dataloaders(tokenizer, dataset, data_path, batch_size, distributed, local_rank,train_on_inputs,maxlen):
     """Creates and caches the global DataLoaders to avoid memory issues."""
-    global train_loader, val_loader
+    global train_loader, val_loader,train_dataset
 
     if train_loader is None or val_loader is None:
         train_sample_number, val_sample_number = 5, 2
-        train_loader, _ = get_dataset_loader(
+        train_loader, train_dataset = get_dataset_loader(
             tokenizer, train_sample_number, cutoff_len=maxlen, train_on_inputs=train_on_inputs,
             mode='train', dataset=dataset, data_path=data_path, batch_size=batch_size,
             workers=0, distributed=distributed, local_rank=local_rank,shuffle=True
@@ -159,6 +158,7 @@ def parse_args():
     parser.add_argument('--num_batches_val', type=int, default=-1, help="Number of batches for validation (-1 for all)")
     
     parser.add_argument("--fair_reweight", action='store_true', help='Flag to train with reweighting the input data while finetuning')
+    parser.add_argument("--debug", action='store_true', help='Flag to debug')
     parser.add_argument('--group_num', type=int, default=5, help='Number of item groups for popularity fairness (default is 5 as per IFairLRS paper)')
     
     args = parser.parse_args()
@@ -170,7 +170,6 @@ if __name__ == "__main__":
     args = parse_args()
     print("Args: ",args)
 
-    AUTH_TOKEN = "YOUR_HF_TOKEN"
     
     base_model = args.base_model
     dataset = args.dataset
@@ -189,6 +188,7 @@ if __name__ == "__main__":
         SAVE_DIR += '-FAIR-IPS'
     os.makedirs(SAVE_DIR, exist_ok=True)
     
+    AUTH_TOKEN="YOUR_HF_TOKEN"
     tokenizer = AutoTokenizer.from_pretrained(base_model,use_auth_token=AUTH_TOKEN)
 
     tokenizer.pad_token_id = (
@@ -199,6 +199,12 @@ if __name__ == "__main__":
     # Limit training to a fixed number of batches per trial for efficiency
     num_batches_train = args.num_batches_train  # 951 for yelp ; 1230 for clothing  ; 600 for toys ; 700 for beauty (10% of train data)
     num_batches_val = args.num_batches_val # 190 for yelp ; 246 for clothing ; 120 for toys ; 140 for beauty (5% of val data)
+    
+    n_trials = 20
+    if args.debug:
+        n_trials=2
+        num_batches_train = 100
+        num_batches_val = 100
     
     epochs = args.num_epochs
 
@@ -217,5 +223,5 @@ if __name__ == "__main__":
         maxlen=maxlen,
         train_on_inputs=train_on_inputs
     )    
-    run_study(n_trials=20, n_gpus=2)
+    run_study(n_trials=n_trials, n_gpus=2)
 
