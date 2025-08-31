@@ -12,6 +12,30 @@ from tqdm import tqdm
 import wandb
 import math
 
+import csv
+
+def write_batch_output(batch_id, start, end, output_file="batches-retrieve-test.csv"):
+    """
+    Appends a batch record to a CSV file with columns:
+    batch_id, start, end
+    """
+
+    file_exists = os.path.isfile(output_file)
+
+    with open(output_file, mode="a", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=["batch_id", "start", "end"])
+
+        # Write header only if file is new
+        if not file_exists:
+            writer.writeheader()
+
+        writer.writerow({
+            "batch_id": batch_id,
+            "start": start,
+            "end": end,
+        })
+
+
 def parse_args():
     parser = argparse.ArgumentParser(description="Argument parser for CHATGPT expl generation script")
 
@@ -43,10 +67,11 @@ def main(args):
     # ==========================
     
     start = time()
+    # device = torch.device(f"cuda:{args.local_rank}")
     seedSet(args.seed)
     
     
-    API_KEY = "" # Fill your API Key
+    API_KEY = ""
     client = openai.OpenAI(api_key=API_KEY)
     MODEL_NAME = "gpt-4.1-mini"
     
@@ -159,6 +184,9 @@ def main(args):
         completion_window="24h"
     )
     print("BATCH JOB: after creation:",batch_job)
+    
+    write_batch_output(batch_job.id, start, end, output_file="batches-retrieve-test.csv")
+    
 
     del test_expl_prompt_data
     
@@ -169,6 +197,7 @@ def main(args):
 
 
 if __name__ == '__main__':
+    # os.environ['CUDA_VISIBLE_DEVICES'] = "2"
     args = parse_args()
     print("ARGS: ",args)
     main(args)
