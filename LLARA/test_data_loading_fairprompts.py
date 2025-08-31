@@ -18,6 +18,7 @@ import os
 from torch.utils.data.distributed import DistributedSampler
 from copy import deepcopy
 
+POP_MAP = {1:1, 0:0}
 
 def load_prompt(prompt_path):
     if os.path.isfile(prompt_path):
@@ -151,17 +152,17 @@ class TrainCollater:
 
 
 
-def get_dataset_object(sample_numbers, dataset='toys',data_path="../data", sample_type='random',local_rank=0):
+def get_dataset_object(popitems, sample_numbers, dataset='toys',data_path="../data", sample_type='random',local_rank=0):
     
     if dataset == 'yelp':
-        data_obj = YelpTestData(batch_size=sample_numbers, dataset=dataset, data_path=data_path, sample_type=sample_type,local_rank=local_rank)
+        data_obj = YelpFairData(popitems = popitems, batch_size=sample_numbers, dataset=dataset, data_path=data_path, sample_type=sample_type,local_rank=local_rank)
     
     else:
-        data_obj = AmazonTestData(batch_size=sample_numbers, dataset=dataset, data_path=data_path, sample_type=sample_type,local_rank=local_rank)
+        data_obj = AmazonFairData(popitems = popitems, batch_size=sample_numbers, dataset=dataset, data_path=data_path, sample_type=sample_type,local_rank=local_rank)
     
     return data_obj
     
-def get_dataset_loader(data_obj, tokenizer, prompt_path, mode='test',batch_size=16,workers=4,distributed=False,max_epochs=1,shuffle=False,maxlen=784):
+def get_fairprompts_loader(data_obj, tokenizer, prompt_path, mode='test',batch_size=16,workers=4,distributed=False,max_epochs=1,shuffle=False,maxlen=784):
     if distributed:
         sampler = DistributedSampler(data_obj)
     else:
@@ -187,9 +188,9 @@ def get_dataset_loader(data_obj, tokenizer, prompt_path, mode='test',batch_size=
     return loader
     
 
-class YelpTestData(Dataset):
-    def __init__(self, dataset='yelp',batch_size=100, data_path = '../data/', sample_type='random',local_rank=0):
-        print("Yelp Test Dataset Loader Here!")
+class YelpFairData(Dataset):
+    def __init__(self, popitems, dataset='yelp',batch_size=100, data_path = '../data/', sample_type='random',local_rank=0):
+        print("Yelp Fair Dataset Loader Here!")
         self.data_path = data_path
         self.local_rank=local_rank
         self.print_once=False
@@ -240,7 +241,11 @@ class YelpTestData(Dataset):
         self.meta_dict = {}
         for i, meta_item in enumerate(self.meta_data):
             self.meta_dict[meta_item['business_id']] = i
-            
+        
+        self.popitems = [int(self.item2id[item]) for item in popitems]
+
+        print("# Target Items: ",len(self.popitems))
+        print("Sample Items: ",list(self.popitems)[:5])
 
         print('compute_datum_info')
         self.total_length = 0
@@ -263,7 +268,10 @@ class YelpTestData(Dataset):
     
     def get_title(self,target_item):
         return clean_text(self.meta_data[self.meta_dict[self.id2item[target_item]]].get('name','unknown title'))[:200]
-            
+    
+    def get_pop_id(self, item):
+        return POP_MAP[int(int(item) in self.popitems)]
+    
     def __getitem__(self, idx):
         
         out_dict = {}
@@ -284,7 +292,13 @@ class YelpTestData(Dataset):
         purchase_history = np.random.choice(purchase_history,min(self.MAX_HISTORY_LEN,len(purchase_history)), replace=False)
         purchase_history = purchase_history.tolist()
 
-        purchase_history_titles = ["\"" + self.get_title(item) + "\"" for item in purchase_history]
+        # purchase_history_titles = ["\"" + self.get_title(item) + "\"" for item in purchase_history]
+        history_data = []
+        for item in purchase_history:
+            title = "\"" + self.get_title(item) + "\""
+            popID = self.get_pop_id(item)
+            history_data.append(f"Item title: {title}, Item publisher: {popID}") 
+        
         
         candidate_item_idx = datum_info_idx[2] 
         
@@ -318,14 +332,16 @@ class YelpTestData(Dataset):
             label:
         
         '''
-            
+        cand_item_data = f"Item title: {target_item_title}, Item publisher: {self.get_pop_id(target_item)}" 
+        
+        
         out_dict['UserID'] = int(user_id)
         out_dict['TargetItemID'] = int(target_item)
         out_dict['InteractedNum'] = len(purchase_history)
         out_dict['InteractedItemIDs'] = [int(item) for item in purchase_history]
         out_dict['original_item'] = int(sequence[-1])
-        out_dict['InteractedItemTitles'] = purchase_history_titles
-        out_dict['TargetItemTitle'] = target_item_title
+        out_dict['InteractedItemTitles'] = history_data
+        out_dict['TargetItemTitle'] = cand_item_data
         
         out_dict['label'] = target_text
         
@@ -333,9 +349,9 @@ class YelpTestData(Dataset):
         return out_dict
     
 
-class AmazonTestData(Dataset):
-    def __init__(self, dataset='toys', data_path = '../data/',batch_size=100, sample_type='random',local_rank=0):
-        print("Amazon Test Dataset Loader Here!")
+class AmazonFairData(Dataset):
+    def __init__(self, popitems, dataset='toys', data_path = '../data/',batch_size=100, sample_type='random',local_rank=0):
+        print("Amazon Fair Dataset Loader Here!")
         self.data_path = data_path
         self.local_rank=local_rank
         self.print_once=False
@@ -390,7 +406,12 @@ class AmazonTestData(Dataset):
         self.meta_dict = {}
         for i, meta_item in enumerate(self.meta_data):
             self.meta_dict[meta_item['asin']] = i
-            
+        
+        self.popitems = [int(self.item2id[item]) for item in popitems]
+
+        print("# Target Items: ",len(self.popitems))
+        print("Sample Items: ",list(self.popitems)[:5])
+        
         print('compute_datum_info')
         self.total_length = 0
         self.datum_info = []
@@ -409,6 +430,9 @@ class AmazonTestData(Dataset):
     
     def get_title(self,target_item):
         return clean_text(self.meta_data[self.meta_dict[self.id2item[target_item]]].get('title','unknown title'))[:200]
+    
+    def get_pop_id(self, item):
+        return POP_MAP[int(int(item) in self.popitems)]
     
     def __getitem__(self, idx):
         
@@ -430,7 +454,13 @@ class AmazonTestData(Dataset):
         purchase_history = np.random.choice(purchase_history,min(self.MAX_HISTORY_LEN,len(purchase_history)), replace=False)
         purchase_history = purchase_history.tolist()
 
-        purchase_history_titles = ["\"" + self.get_title(item) + "\"" for item in purchase_history]
+        # purchase_history_titles = ["\"" + self.get_title(item) + "\"" for item in purchase_history]
+        history_data = []
+        for item in purchase_history:
+            title = "\"" + self.get_title(item) + "\""
+            popID = self.get_pop_id(item)
+            history_data.append(f"Item title: {title}, Item publisher: {popID}") 
+        
         
         candidate_item_idx = datum_info_idx[2] 
         
@@ -464,14 +494,16 @@ class AmazonTestData(Dataset):
             label:
         
         '''
-            
+        cand_item_data = f"Item title: {target_item_title}, Item publisher: {self.get_pop_id(target_item)}" 
+        
+        
         out_dict['UserID'] = int(user_id)
         out_dict['TargetItemID'] = int(target_item)
         out_dict['InteractedNum'] = len(purchase_history)
         out_dict['InteractedItemIDs'] = [int(item) for item in purchase_history]
         out_dict['original_item'] = int(sequence[-1])
-        out_dict['InteractedItemTitles'] = purchase_history_titles
-        out_dict['TargetItemTitle'] = target_item_title
+        out_dict['InteractedItemTitles'] = history_data # purchase_history_titles
+        out_dict['TargetItemTitle'] = cand_item_data
         
         out_dict['label'] = target_text
         

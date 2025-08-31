@@ -75,12 +75,13 @@ class ExplBPRDataset(Dataset):
 
 PROMPT_MAPS = {'beauty':build_explain_prompt_beauty,
                'clothing':build_explain_prompt_clothing,
+               'sports':build_explain_prompt_sports,
                'yelp':build_explain_prompt_yelp_general,
                'beauty-chatgpt':build_explain_chatgptprompt_beauty,
               }
 
-THRESHOLDS = {'beauty':4, 'clothing':4,'yelp':4}
-MAX_PREFS  = {'beauty':4, 'clothing':4,'yelp':0}
+THRESHOLDS = {'beauty':4, 'clothing':4,'yelp':4,'sports':4}
+MAX_PREFS  = {'beauty':4, 'clothing':4,'yelp':0,'sports':4}
 
 
 class ExplGenTrainData:

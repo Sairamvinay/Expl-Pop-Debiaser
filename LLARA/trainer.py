@@ -113,6 +113,9 @@ def train_custom_single(seed=999,
     if fair_reweight:
         # FAIR RANKER REWEIGHTING CASE
         Fair_Ranker = IPS(dataset = train_dataset, group_num = group_num, group_weight = np.ones(group_num), variance_control=variance_control)
+    freeze_lora=False
+    if llama_ckpt:
+        freeze_lora = True
     
     # Step 2: Model Creation
     model = LLARA(
@@ -121,7 +124,7 @@ def train_custom_single(seed=999,
         item_num=item_num,
         embedding_size=rec_dim,
         freeze_rec=True,
-        freeze_lora=False,
+        freeze_lora=freeze_lora,
         freeze_proj=False,
         llama_model=base_model,
         max_txt_len=maxlen,

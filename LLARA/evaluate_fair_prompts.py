@@ -13,7 +13,7 @@ import argparse
 
 from model_arch import LLARA
 from utils import seedSet,save_pickle,readTargetItem,getBasicScores,getFairnessScores,area_curve_metric
-from test_data_loading import get_dataset_loader,get_dataset_object
+from test_data_loading_fairprompts import get_fairprompts_loader,get_dataset_object
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
@@ -36,7 +36,7 @@ def parse_eval_args():
     parser.add_argument("--rec_dim",type=int,default=64,help="Recommender Embedding Size")
     parser.add_argument("--lora_r",type=int,default=8,help="Lora R Value")
     parser.add_argument("--lora_alpha",type=int,default=16,help="Lora Alpha Value")
-    parser.add_argument("--prompt_path",type=str, default="prompts/llara_amazon.txt",help='Path to load the prompt styles: e.g.: "prompts/llara_amazon.txt"')
+    parser.add_argument("--prompt_path",type=str, default="prompts/llara_amazon-fairprompts.txt",help='Path to load the prompt styles: e.g.: "prompts/llara_amazon-fairprompts.txt"')
     
     parser.add_argument("--temperature", type=float, default=0.7, help='Temperature for LLM output generation')
     parser.add_argument("--top_p", type=float, default=0.9, help='Top_p for LLM output generation')
@@ -48,13 +48,13 @@ def parse_eval_args():
     return args
 
 
-def evaluate_llara(seed=999,
+def fair_prompts_evaluate_llara(seed=999,
                    gpu = 0,
                    dataset = 'beauty',
                    model_name = 'LLARA',
                    data_path = '../data/',
                    rec_dim = 64,
-                   prompt_path = 'prompts/llara_amazon.txt',
+                   prompt_path = 'prompts/llara_amazon-fairprompts.txt',
                    maxlen = 512,
                    output_dir = '../top-preds/',
                    lora_r=16,
@@ -73,7 +73,7 @@ def evaluate_llara(seed=999,
     
     seedSet(seed) 
     x, _, _, values = inspect.getargvalues(inspect.currentframe())
-    print("Arguments passed to evaluate_llara():")
+    print("Arguments passed to fair_prompts_evaluate_llara():")
     for arg in x:
         print(f"\t {arg} = {values[arg]}")
     
@@ -92,11 +92,12 @@ def evaluate_llara(seed=999,
     batch_size = 100
       
     
-    eval_dataset = get_dataset_object(sample_numbers = batch_size, dataset=dataset, data_path=data_path, local_rank = gpu)
+    
     
     path = os.path.join(data_path, dataset, "targetItems.txt")
     popitems = readTargetItem(path)
     print("Sample Items: ",list(popitems)[:5])
+    eval_dataset = get_dataset_object(popitems=popitems,sample_numbers = batch_size, dataset=dataset, data_path=data_path, local_rank = gpu)
     
     popitems = [int(eval_dataset.item2id[item]) for item in popitems]
 
@@ -133,7 +134,7 @@ def evaluate_llara(seed=999,
     model.set_mode('v2')
     
     
-    eval_loader = get_dataset_loader(data_obj = eval_dataset, tokenizer = model.llama_tokenizer, prompt_path = prompt_path,mode='test',batch_size = batch_size, workers= num_workers, shuffle = False, distributed=False,maxlen=args.maxlen)
+    eval_loader = get_fairprompts_loader(data_obj = eval_dataset, tokenizer = model.llama_tokenizer, prompt_path = prompt_path,mode='test',batch_size = batch_size, workers= num_workers, shuffle = False, distributed=False,maxlen=args.maxlen)
     
     yes_token = model.llama_tokenizer("Yes",add_special_tokens=False).input_ids[0]
     no_token = model.llama_tokenizer("No",add_special_tokens=False).input_ids[0]
@@ -244,9 +245,9 @@ def evaluate_llara(seed=999,
 if __name__ == "__main__":
     args = parse_eval_args()
 
-    print("Starting Evaluation with args:", args)
+    print("Starting Fair-Prompt Based Evaluation with args:", args)
     
-    evaluate_results = evaluate_llara(seed=args.seed,
+    evaluate_results = fair_prompts_evaluate_llara(seed=args.seed,
                    gpu = args.gpu,
                    data_path=args.data_path,
                    dataset=args.dataset,
