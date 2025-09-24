@@ -1,7 +1,7 @@
 data_path='../data/'
-dataset='clothing'
-num_batches_train=1250 # 1597 for yelp ; 1250 for clothing  ;  for toys ; 961 for beauty (10% of train data)
-num_batches_val=2462 # 1902 for yelp ; 2462 for clothing ;  for toys ;1398 for beauty (full val data)
+dataset='beauty'
+num_batches_train=961 # 1407 for sports ; 1597 for yelp ; 961 for beauty (10% of train data)
+num_batches_val=1398 # 2225 for sports ; 1902 for yelp ;1398 for beauty (full val data)
 batch_size=16
 seed=999
 epochs=10

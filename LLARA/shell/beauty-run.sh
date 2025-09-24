@@ -1,5 +1,14 @@
+# LLaRa Vanilla training script
+# Stage 1 Training can be done by independently training TALLRec 1st 
+# we can use Rec_ckpt after training Matrix Factorization seperately 
+# see MF/ for more details.
+# We can re-use TALLRec checkpoints as Stage 1 point ; Update with llama_ckpt
+# Use trained MF weights for Stage 1 rec_ckpt also.
+# Lora_r and Lora_alpha can be chosen after tuning from TALLRec tuning step (Kept 16 and 16 as a reference)
+# update rec_dim after MF checkpoint
+# x mark means the developer needs to fill after running HP tuning.
 seed=999
-output_dir="snap/llama-beauty/"
+output_dir="snap/llama-beauty/" # replace with yelp here
 data_path="../data/"
 dataset="beauty"
 num_workers=4
@@ -10,16 +19,16 @@ maxlen=512
 gradient_accumulation_steps=1
 num_batches_train=-1
 num_batches_val=-1
-prompt_path="prompts/llara_amazon.txt"
+prompt_path="prompts/llara_amazon.txt"  # replace with yelp here
 lora_r=16
 lora_alpha=16
-lora_dropout=0.1816147276897725
-lr=0.0002772015149297891
-wd=3.792059695219474e-06
-wr=0.018243991243987158
-rec_dim=128
-rec_ckpt="../MF/snap/beauty/checkpoint_epoch_BEST.pt"
-llama_ckpt="../TALLRec/snap/llama-beauty/"
+lora_dropout=x
+lr=x
+wd=x
+wr=x
+rec_dim=x
+rec_ckpt="../MF/snap/beauty/checkpoint_epoch_BEST.pt" # replace with yelp here
+llama_ckpt="../TALLRec/snap/llama-beauty/" # replace with yelp here
 mkdir -p $output_dir
 
 
