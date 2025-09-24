@@ -1,18 +1,21 @@
+# TALLRec + Clean training script
+# Lora_r and Lora_alpha can be chosen after tuning from TALLRec tuning step
+# x mark means the developer needs to fill after running HP tuning.
 seed=999
-output_dir="snap/llama-yelp/"
+output_dir="snap/llama-beauty/"
 base_model="meta-llama/Llama-3.2-1B"
 data_path="../data/"
-dataset="yelp"
-lr=0.000491302414540335
-wd=0.006091038406659811
-dropout=0.0740669667495478
-wr=0.010605004344043246
+dataset="beauty"
+lr=x
+wd=x
+dropout=x
+wr=x
 num_workers=4
 batch_size=16
 micro_batch_size=16
-num_epochs=8
-lora_r=32
-lora_alpha=16
+num_epochs=3
+lora_r=x
+lora_alpha=x
 clip_grad_norm=1.0
 maxlen=512
 gradient_accumulation_steps=1
@@ -46,26 +49,5 @@ CUDA_VISIBLE_DEVICES=1,2 python3 -u -m torch.distributed.launch --nproc_per_node
     --seed $seed \
     --distributed
 
-# CUDA_VISIBLE_DEVICES=2 python3 -u smaller_llm.py \
-#     --base_model $base_model \
-#     --data_path $data_path \
-#     --dataset $dataset \
-#     --output_dir ${output_dir} \
-#     --batch_size $batch_size \
-#     --micro_batch_size $micro_batch_size \
-#     --num_epochs $num_epochs \
-#     --learning_rate $lr \
-#     --weight_decay $wd \
-#     --maxlen $maxlen \
-#     --num_workers $num_workers \
-#     --clip_grad_norm $clip_grad_norm \
-#     --gradient_accumulation_steps $gradient_accumulation_steps \
-#     --warmup_ratio $wr \
-#     --lora_r $lora_r \
-#     --lora_alpha $lora_alpha \
-#     --lora_dropout $dropout \
-#     --lora_target_modules "[\"q_proj\",\"v_proj\"]" \
-#     --train_on_inputs \
-#     --seed $seed \
 
 

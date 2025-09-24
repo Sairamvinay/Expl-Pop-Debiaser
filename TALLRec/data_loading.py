@@ -252,10 +252,9 @@ class YelpData(Dataset):
         out_dict = {}
         
         # <ItemTitleList>, <TargetItemTitle>, {Yes/No}
-        # source_text = "A user has given high ratings to the following products: {}. Leverage the information to predict whether the user would enjoy the product titled {}? Answer with \"Yes\" or \"No\"."  
         data_point = {}
-        data_point['instruction'] = "A user has given high ratings to the following products. Leverage the information to predict whether the user would enjoy the target product?  Answer with \"Yes\" or \"No\". Respond with exactly one word and no additional text."
-        data_point['input'] = "User Preference: {}\nWhether the user will enjoy the target product {}?"
+        data_point['instruction'] = "A user has given high ratings to the following businesses. Leverage the information to predict whether the user would enjoy the target business?  Answer with \"Yes\" or \"No\". Respond with exactly one word and no additional text."
+        data_point['input'] = "User Preference: {}\nWhether the user will enjoy the target business {}?"
         datum_info_idx = self.datum_info[idx]
         assert datum_info_idx[0] == idx
         datum_idx = datum_info_idx[1]

@@ -1,27 +1,30 @@
+# TALLRec + FairIPS training script
+# Lora_r and Lora_alpha can be chosen after tuning from TALLRec tuning step
+# x mark means the developer needs to fill after running HP tuning.
 seed=999
-output_dir="snap/llama-beauty/"
+output_dir="snap/llama-beauty-FAIR-IPS/"
 base_model="meta-llama/Llama-3.2-1B"
 data_path="../data/"
 dataset="beauty"
-lr=0.00048124176545942684
-wd=0.00035562651952978036
-dropout=0.20811890586683557
-wr=0.04229836603553638
-lora_r=16
-lora_alpha=32
+lr=x
+wd=x
+dropout=x
+wr=x
 num_workers=4
 batch_size=16
 micro_batch_size=16
-num_epochs=1
+num_epochs=3
+lora_r=x
+lora_alpha=x
 clip_grad_norm=1.0
 maxlen=512
 gradient_accumulation_steps=1
-num_batches_train=10
-num_batches_val=10
+num_batches_train=-1
+num_batches_val=-1
 
 mkdir -p $output_dir
 
-CUDA_VISIBLE_DEVICES=1,2 python3 -u -m torch.distributed.launch --nproc_per_node=2 smaller_llm.py \
+CUDA_VISIBLE_DEVICES=1,2 python3 -u -m torch.distributed.launch --nproc_per_node=2 smaller_llm_IPS.py \
     --base_model $base_model \
     --data_path $data_path \
     --dataset $dataset \
@@ -42,5 +45,9 @@ CUDA_VISIBLE_DEVICES=1,2 python3 -u -m torch.distributed.launch --nproc_per_node
     --lora_alpha $lora_alpha \
     --lora_dropout $dropout \
     --lora_target_modules "[\"q_proj\",\"v_proj\"]" \
+    --train_on_inputs \
     --seed $seed \
     --distributed
+
+
+
