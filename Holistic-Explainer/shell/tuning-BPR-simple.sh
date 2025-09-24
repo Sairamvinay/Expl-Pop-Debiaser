@@ -1,8 +1,8 @@
 # Hyperparameter tuning script for BPR- style simple learning; no need of explanations for this script to run
 data_path='../data/'
 dataset='beauty'
-num_batches_train=1597 # 1407 for sports ; 1597 for yelp; 961 for beauty (10% of train data)
-num_batches_val=1902 # 2225 for sports; 1902 for yelp  ;1398 for beauty (full val data)
+num_batches_train=961 # 1407 for sports ; 1597 for yelp; 961 for beauty (10% of train data)
+num_batches_val=1398 # 2225 for sports; 1902 for yelp  ;1398 for beauty (full val data)
 batch_size=16
 seed=999
 epochs=5
