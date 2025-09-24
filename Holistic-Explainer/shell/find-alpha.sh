@@ -1,3 +1,4 @@
+# Re-ranking script for TAU Study first step
 #!/bin/bash
 
 OUTPUT_DIR="outputs/beauty/FindALPHA-ALGO/"
@@ -16,7 +17,7 @@ K=10
 mkdir -p "$OUTPUT_DIR"
 
 # for tau in $(seq 0 0.05 1); do
-for tau in 0.0 0.1 0.2 0.3 0.5 0.6 0.7 0.8 0.9 1.0; do
+for tau in 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0; do
     # Format tau to two decimal places
     tau_fmt=$(printf "%.2f" $tau)
     # for K in 1 2 3 5 10 20; do
@@ -37,7 +38,3 @@ for tau in 0.0 0.1 0.2 0.3 0.5 0.6 0.7 0.8 0.9 1.0; do
         >> "$OUTPUT_DIR/EVAL-FindALPHA-ALGO-BEAUTY-JULY29-RERANK-TOP-${K}-TAU-${tau_fmt}.txt"
     # done
 done
-
-# Example for one run with Tau=0.4 and K = 10
-
-# python3 -u holistic_explainer-evaluate-BPR-SAI-ranking-ALPHA-weightage.py --output_dir top-preds/ --seed 999 --num_workers 4 --batch_size 100 --data_path ../data/ --dataset beauty --pos_path top-preds/stage-1-POS-only-EXPLS/ --neg_path top-preds/stage-1-NEG-only-EXPLS/ --zero_path top-preds/stage-1-ZERO-EXPLS/ --local-rank 1 --top_k 10 --tau 0.4 --debug >> outputs/beauty/DEBUG-EVAL-FindALPHA-ALGO-BEAUTY-JULY29-RERANK-TOP-10-TAU-0.4.txt

@@ -135,11 +135,12 @@ def grid_search(user, pos_ranks, neg_ranks, zero_ranks, targetItems, groundtruth
     
     # Choose best alpha
     sorted_recs = sorted(user_scores.items(), key=lambda x:x[1]['ndcg'],reverse=True)
+    max_rec = sorted_recs[0]
     sorted_recs = [rec for rec in sorted_recs if rec[1]['pr'] <= TAU]
     if sorted_recs:
         best_rec = sorted_recs[0]
     else:
-        best_rec = (0.0, user_scores[0.0])
+        best_rec = max_rec # (0.0, user_scores[0.0])
     
     count = False
     if best_rec[1]['res']['hit'] > 0:
@@ -156,8 +157,8 @@ def grid_search(user, pos_ranks, neg_ranks, zero_ranks, targetItems, groundtruth
         
         # print(f"topK with results: {with_scores[:K]}")
         
-        for xx, lst in enumerate(with_scores[:K]):
-            print(f"Rank {xx}: item: {lst}")
+        for ranking_pos, lst in enumerate(with_scores[:K]):
+            print(f"Rank {ranking_pos}: item: {lst}")
 
         # print(f"topK_results_all: {topK_results_all}")
         print(f"gt: {groundtruth_item}")
@@ -184,11 +185,12 @@ def main(args, new_pos_expls, new_neg_expls, zero_preds, user_num, item_num, loc
     
     all_info = []
     golds,preds = [],[]
+    USER_ALPHAS = {}
     
     TAU = args.tau
     K = args.top_k
     
-    os.makedirs(os.path.join(args.output_dir,f"Rerank-FindAlpha",f"TAU={TAU}-K={K}"),exist_ok=True)
+    os.makedirs(os.path.join(args.output_dir,args.dataset,f"Rerank-FindAlpha",f"TAU={TAU}-K={K}"),exist_ok=True)
     
     ui_scores = dict()
     gt = dict()
@@ -227,7 +229,7 @@ def main(args, new_pos_expls, new_neg_expls, zero_preds, user_num, item_num, loc
                     debug = args.debug
                     )
         success += found
-        
+        USER_ALPHAS[user] = best_rec[0]
         scores_dict = best_rec[1]['rec_list']
         rerank_lst = sorted(scores_dict.items(),key = lambda x:x[1], reverse=True)
         gt[user] = [gold_item]
@@ -249,8 +251,8 @@ def main(args, new_pos_expls, new_neg_expls, zero_preds, user_num, item_num, loc
     print("# preds: ",len(preds))
     
     if not args.debug:
-        save_path = os.path.join(args.output_dir,f"Rerank-FindAlpha",f"TAU={TAU}-K={K}",f"DEEPFM-{args.dataset}-preds.pkl")
-        save_pickle({'ui_scores':ui_scores,'gt':gt, 'golds':golds, 'preds':preds},save_path)
+        save_path = os.path.join(args.output_dir,args.dataset,f"Rerank-FindAlpha",f"TAU={TAU}-K={K}",f"DEEPFM-{args.dataset}-preds.pkl")
+        save_pickle({'ui_scores':ui_scores,'gt':gt, 'golds':golds, 'preds':preds, 'alphas':USER_ALPHAS},save_path)
     
     
     print("ATTACK UI SCORES: ",ui_scores)

@@ -1,3 +1,4 @@
+# Step 2: Re-rank TAU Study
 #!/bin/bash
 
 OUTPUT_DIR="outputs/beauty/FindALPHA-withVAL-ALGO/"
@@ -23,7 +24,7 @@ NUM_BATCHES_VAL=100
 mkdir -p "$OUTPUT_DIR"
 
 # for tau in $(seq 0 0.05 1); do
-for tau in  1.0 0.0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9; do
+for tau in 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0; do
     # Format tau to two decimal places
     tau_fmt=$(printf "%.2f" $tau)
     # for K in 1 2 3 5 10 20; do

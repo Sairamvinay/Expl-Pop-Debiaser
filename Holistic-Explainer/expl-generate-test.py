@@ -39,8 +39,7 @@ def main(args):
     # ==========================
     # 1. Load LLM + Tokenizer + LoRA
     # ==========================
-    AUTH_TOKEN = "YOUR_HF_TOKEN"
-
+    
     start = time()
     device = torch.device(f"cuda:{args.local_rank}")
     seedSet(args.seed)
@@ -52,16 +51,17 @@ def main(args):
     # Step 1. Basic Reward Model (RM) Setup
     # =============================================================
     
-    model_name = 'meta-llama/Llama-3.2-1B-Instruct'
-    # model_name = 'meta-llama/Llama-2-7b'
-    # model_name = 'meta-llama/Llama-2-7b-hf'
+    encoder_model_name = 'meta-llama/Llama-3.2-1B-Instruct'
+    # encoder_model_name = 'meta-llama/Llama-2-7b'
+    # encoder_model_name = 'meta-llama/Llama-2-7b-hf'
     
         
     
     # =============================================================
     # Step 2. Basic Tokenizer Setup
     # =============================================================
-    tokenizer = AutoTokenizer.from_pretrained(model_name,use_auth_token=AUTH_TOKEN)
+    AUTH_TOKEN = "YOUR_HF_TOKEN"
+    tokenizer = AutoTokenizer.from_pretrained(encoder_model_name,use_auth_token=AUTH_TOKEN)
     tokenizer.pad_token_id = tokenizer.eos_token_id
     tokenizer.padding_side='left' # ADDED BY ME to avoid error for decoder-only model
     
@@ -89,7 +89,7 @@ def main(args):
     # -------------------
     # 4. Initialize Frozen Explanation Generator
     # -------------------
-    gen_model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype=torch.float16,use_auth_token=AUTH_TOKEN)
+    gen_model = AutoModelForCausalLM.from_pretrained(encoder_model_name, torch_dtype=torch.float16,use_auth_token=AUTH_TOKEN)
     gen_model.to(device)
     gen_model.eval()
     
@@ -112,7 +112,7 @@ def main(args):
     print(f"#Batches: {num_batches}")
     
     
-    save_path = os.path.join(args.output_dir,args.dataset,f"{args.model_name}.pkl")
+    save_path = os.path.join(args.output_dir,args.dataset,"test.pkl")
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
     if os.path.exists(save_path):
         explanations = load_pickle(save_path)

@@ -1,1 +1,2 @@
+# Script to retrieve all hosted chatgpt requests
 python3 expl-generate-train-chatgpt-retrieve.py --data_path ../data/ --dataset beauty --output_dir generated-expls-chatgpt --maxlen 50 --seed 999 >> outputs/beauty/Chatgpt-runs/retrieving-AUG24.txt

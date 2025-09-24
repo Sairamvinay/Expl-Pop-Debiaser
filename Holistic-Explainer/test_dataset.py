@@ -113,10 +113,11 @@ class ExplTestDataset(Dataset):
 
 PROMPT_MAPS = {'beauty':build_explain_prompt_beauty,
                'clothing':build_explain_prompt_clothing,
+               "sports":build_explain_prompt_sports,
                'yelp':build_explain_prompt_yelp_general,
                'beauty-chatgpt':build_explain_chatgptprompt_beauty,
               }
-THRESHOLDS = {'beauty':4, 'clothing':4,'yelp':4}
+THRESHOLDS = {'beauty':4, 'clothing':4,'yelp':4,'sports':4}
 MAX_PREFS  = {'beauty':4, 'clothing':4,'yelp':0}
 
 
@@ -170,9 +171,28 @@ class ExplGenData:
         # Step 1: Load the R^K data
         # ==========================
         
+        self.positive_items = self.get_positive_items()
+        print("len(positive items):",len(self.positive_items))
+        
         file_path = os.path.join(self.topK_path, f"{self.model_name}-{self.dataset}-preds.pkl")
         print("Loading data from: ",file_path)
-        self.topK_recommendations = self.get_topK_recommendations(file_path)
+        if os.path.exists(file_path):
+            self.topK_recommendations = self.get_topK_recommendations(file_path)
+        else:
+            self.topK_recommendations = {}
+            negative_samples = ReadLineFromFile(os.path.join(data_path, dataset, 'negative_samples.txt'))
+            total = 0
+            for user in self.positive_items:
+                pos_item = self.positive_items[user]
+                candidate_samples = negative_samples[user].split(' ', 1)[1].split(' ')
+                candidate_samples = [int(pos_item)] + [int(_) for _ in candidate_samples]
+                self.topK_recommendations[user] = candidate_samples
+                total += len(candidate_samples)
+            
+            print("Total # samples: ",total)
+            print("#users to record: ",len(self.topK_recommendations))
+            
+                
         
         name = self.dataset
         if chatgpt:
@@ -181,17 +201,16 @@ class ExplGenData:
             self.LIMIT = 100
         else:
             self.kwargs = {}
-            self.LIMIT=1000 # assuming all datasets stay under 1000 chars length
+            self.LIMIT=1000 # assuming all dataset metadata texts stay under 1000 chars length
         print("Mapping name for prompts: ",name,' with kwargs: ',self.kwargs)
         
         self.build_expl_inputs = PROMPT_MAPS[name]
-        self.positive_items = self.get_positive_items()
-        print("len(positive items):",len(self.positive_items))
+        
         
     
     def get_positive_items(self):
         # Take all users chosen from the topK since we align these together
-        return {user:self.get_original(user) for user in self.topK_recommendations}
+        return {user:self.get_original(user) for user in range(len(self.user2id))}
     
     def get_original(self, user):
         sequential_datum = self.sequential_data[user]
