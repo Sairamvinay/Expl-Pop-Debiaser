@@ -13,11 +13,17 @@ Steps to reproduce
 Please follow `TALLRec/` ([source](https://github.com/SAI990323/TALLRec)), `CoLLM/` ([source](https://github.com/zyang1580/CoLLM)) and `LLARA` ([source](https://github.com/ljy0ustc/LLaRA)) for original instructions. 
 Anyways, please refer `shell` inside each directory for complete instructions (it is almost identical in all the baselines). Run tuning first and then training and finally evaluation scripts. 
 a) `tuning.sh`: for tuning Vanilla
+
 b) `tuning-fairness-reweight.sh`: for tuning FAIR-IPS variants
+
 c) `beauty-run.sh`: for training vanilla models
+
 d) `beauty-fairness-reweight.sh`: for training FAIR-IPS models
+
 e) `eval.sh`: evaluate vanilla models
+
 f) `eval-IPS.sh`: evaluate Fair-IPS models
+
 g) `eval-fair-prompts.sh`: evaluate Fair-Prompt models
 
 ## Our method: Holistic-Explainer (Expl-Debias)
@@ -25,11 +31,17 @@ g) `eval-fair-prompts.sh`: evaluate Fair-Prompt models
 Please check `Holistic-Explainer/shell` for running scripts.
 
 a) Check `gen-expl-runs.sh` for LLaMa based explanation generation.
+
 b) (Optional) See `chatgpt-run.sh` and `chatgpt-run-test.sh` for hosting ChatGPT completions. Then `chatgpt-retrieve.sh` for retrieving requests from OpenAI API.
+
 c) Tuning BPR Stage 1: See `tuning-BPR-simple.sh`
+
 d) Train Stage 1: Use found HP and use into `beauty-run.sh` (only first command) 
+
 e) Tuning Contrastive Explanation Stage 2: Use checkpoint from d) into `tuning-BPR-contrexpl.sh`
+
 f) Train Stage 2: See `beauty-run.sh` (only second command) 
+
 g) Evaluate both Stages: see `eval.sh`
 
 For generating and working through 6.4 and 6.5 check `beauty-diff-encoders.sh` and `beauty-diff-generators.sh` and the corresponding `eval-beauty-diff-encoders.sh` for evaluation.
