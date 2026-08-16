@@ -50,4 +50,4 @@ For evaluating different generators: use  `eval.sh` but change the "--expl_path"
 Similarly, for the ablation studies, check `analysis-studies` for Section 5.4. 
 Also, Section 5.2 work related to positive/negation explanation ablation is found inside `ablation-pos-neg-expls` directory which also has the diagrams/table data.
 
-We also attached the explanation fidelity evaluation of Section 4.6
+We also attached the explanation fidelity evaluation (Section 4.6) in `explanation_eval` while we also provide our Appendix work regarding internal representations in `embed_study`
