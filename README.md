@@ -2,7 +2,7 @@
 
 ## Paper Accepted at WISE 26
 - Sairamvinay Vijayaraghavan, Lei Li, Prasant Mohapatra. [Leveraging Holistic Explanations to Mitigate Popularity Bias]. International Web Information Systems Engineering conference (WISE26), 2026 [Accepted].
-- 
+  
 ## Data
 
 Steps to reproduce
