@@ -44,7 +44,10 @@ f) Train Stage 2: See `beauty-run.sh` (only second command)
 
 g) Evaluate both Stages: see `eval.sh`
 
-For generating and working through 6.4 and 6.5 check `beauty-diff-encoders.sh` and `beauty-diff-generators.sh` and the corresponding `eval-beauty-diff-encoders.sh` for evaluation.
+For generating and working through 5.3 check `beauty-diff-encoders.sh` and `beauty-diff-generators.sh` and the corresponding `eval-beauty-diff-encoders.sh` for evaluation.
 For evaluating different generators: use  `eval.sh` but change the "--expl_path" parameter
 
-Similarly, for the ablation studies, check `analysis-studies` for Sections 6.3, 6.4 and 6.5 and `ablation-pos-neg-expls` for Section 6.2 for diagrams/tables.
+Similarly, for the ablation studies, check `analysis-studies` for Section 5.4. 
+Also, Section 5.2 work related to positive/negation explanation ablation is found inside `ablation-pos-neg-expls` directory which also has the diagrams/table data.
+
+We also attached the explanation fidelity evaluation of Section 4.6
