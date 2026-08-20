@@ -32,7 +32,7 @@ g) `eval-fair-prompts.sh`: evaluate Fair-Prompt models
 ## Our method: Holistic-Explainer (Expl-Debias)
 For this section, please refer to subdirectories inside `Holistic-Explainer/`
 
-Please check `shell` for running scripts.
+Please check `shell/` for running scripts.
 
 a) Check `gen-expl-runs.sh` for LLaMa based explanation generation.
 
