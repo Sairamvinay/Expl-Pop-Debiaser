@@ -30,8 +30,9 @@ f) `eval-IPS.sh`: evaluate Fair-IPS models
 g) `eval-fair-prompts.sh`: evaluate Fair-Prompt models
 
 ## Our method: Holistic-Explainer (Expl-Debias)
+For this section, please refer to subdirectories inside `Holistic-Explainer/`
 
-Please check `Holistic-Explainer/shell` for running scripts.
+Please check `shell` for running scripts.
 
 a) Check `gen-expl-runs.sh` for LLaMa based explanation generation.
 
@@ -51,6 +52,6 @@ For generating and working through 5.3 check `beauty-diff-encoders.sh` and `beau
 For evaluating different generators: use  `eval.sh` but change the "--expl_path" parameter
 
 Similarly, for the ablation studies, check `analysis-studies` for Section 5.4. 
-Also, Section 5.2 work related to positive/negation explanation ablation is found inside `ablation-pos-neg-expls` directory which also has the diagrams/table data.
+Also, Section 5.2 work related to positive/negation explanation ablation is found inside `ablation-pos-neg-expls/` directory which also has the diagrams/table data.
 
-We also attached the explanation fidelity evaluation (Section 4.6) in `explanation_eval` while we also provide our Appendix work regarding internal representations in `embed_study`
+We also attached the explanation fidelity evaluation (Section 4.6) in `explanation_eval/` while we also provide our Appendix work regarding internal representations in `embed_study/`
